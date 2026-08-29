@@ -5,6 +5,18 @@ function makeBackendContext() {
   return { config: config, client: client, cacheRepo: cacheRepo };
 }
 
+var APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED = true;
+
+function appsScriptIncrementalDisabledPayload_() {
+  return {
+    accepted: false,
+    skipped: true,
+    code: 'APPS_SCRIPT_INCREMENTAL_DISABLED',
+    errorCode: 'APPS_SCRIPT_INCREMENTAL_DISABLED',
+    message: 'Apps Script incremental sync is disabled. GitHub Actions is the scheduled Dropbox sync runner.'
+  };
+}
+
 function apiGetAppBootstrap() {
   var ctx = makeBackendContext();
   var meta = ctx.cacheRepo.readMeta();
@@ -42,6 +54,10 @@ function apiSaveProject(payload) {
 }
 
 function apiSyncNow() {
+  if (APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED) {
+    var disabled = appsScriptIncrementalDisabledPayload_();
+    return { ok: false, code: disabled.code, message: disabled.message, skipped: true };
+  }
   var ctx = makeBackendContext();
   try {
     return SyncService.syncNow(ctx.client, ctx.cacheRepo, ctx.config);
@@ -56,6 +72,7 @@ function apiGetSyncStatus() {
 }
 
 function apiSetAutoSync(enabled) {
+  if (enabled === true && APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED) return { ok: false, enabled: false, code: 'APPS_SCRIPT_INCREMENTAL_DISABLED', message: appsScriptIncrementalDisabledPayload_().message };
   return SyncService.setAutoSync(enabled === true);
 }
 
@@ -65,6 +82,9 @@ function apiGetAutoSyncStatus() {
 }
 
 function autoSyncTick() {
+  if (APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED) {
+    return { ok: true, skipped: true, code: 'APPS_SCRIPT_INCREMENTAL_DISABLED', message: appsScriptIncrementalDisabledPayload_().message };
+  }
   var config = AppConfig.current();
   if (!config.autoSyncEnabled) return { ok: true, skipped: true };
   var client = DropboxClient.create(config);
@@ -708,6 +728,7 @@ function apiRunSyncNow(token) {
 
 function apiSyncNowLegacy_() {
   return catchLegacy_(function () {
+    if (APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED) return legacyOk_(appsScriptIncrementalDisabledPayload_());
     var ctx = makeBackendContext();
     var res = SyncService.syncNow(ctx.client, ctx.cacheRepo, ctx.config);
     var meta = ctx.cacheRepo.readMeta();
@@ -718,6 +739,25 @@ function apiSyncNowLegacy_() {
 function apiSetAutoSyncEnabled(token, enabled) {
   return catchLegacy_(function () {
     requireSession_(token, ['admin']);
+    if (enabled === true && APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED) {
+      try { SyncService.setAutoSync(false); } catch (ignoreDisable) {}
+      var disabledConfig = AppConfig.current();
+      var disabledSvc = statusSnapshotService_();
+      var disabledSnapshot = disabledSvc && disabledSvc.merge ? disabledSvc.merge({ autoSyncEnabled: false }, disabledConfig) : null;
+      var disabledState = disabledSnapshot && disabledSvc && disabledSvc.metaFromSnapshot
+        ? { meta: disabledSvc.metaFromSnapshot(disabledSnapshot), config: disabledConfig, client: null }
+        : readStatusState_(disabledConfig, false);
+      var disabledHealth = syncSnapshot_(disabledState.meta, disabledConfig, disabledState.client);
+      return legacyOk_({
+        ok: false,
+        enabled: false,
+        code: 'APPS_SCRIPT_INCREMENTAL_DISABLED',
+        message: appsScriptIncrementalDisabledPayload_().message,
+        autoSync: disabledHealth.autoSync,
+        syncStatus: legacySyncStatus_(disabledState.meta),
+        syncHealth: disabledHealth
+      });
+    }
     var result = SyncService.setAutoSync(enabled === true);
     var freshConfig = AppConfig.current();
     var svc = statusSnapshotService_();

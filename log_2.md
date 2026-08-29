@@ -223,3 +223,21 @@
 - Verification:
   - `node --check scripts\local_incremental_sync.js`: PASS.
   - `npm.cmd test -- tests/save-sync-service.test.js tests/python-full-rebuild-publish.test.js`: PASS, 52/52.
+
+## Step 12 - Apps Script incremental sync hard-disabled for GitHub Actions handoff
+
+- User confirmed GitHub Actions should be the scheduled incremental runner and Apps Script should no longer run incremental sync.
+- Apps Script Web API changed:
+  - `autoSyncTick()` returns `APPS_SCRIPT_INCREMENTAL_DISABLED` before creating a Dropbox client;
+  - `apiSyncNow()` returns disabled before creating a Dropbox client;
+  - `apiRequestIncrementalSync()`, `apiRequestProjectIndexSync()`, and `apiRunSyncNow()` route through a disabled legacy payload;
+  - `apiSetAutoSyncEnabled(..., true)` refuses to turn Apps Script auto-sync on and attempts `SyncService.setAutoSync(false)` to remove trigger/state.
+- GitHub/local runner preserved:
+  - `SyncService.syncNow()` and `syncOnce()` remain available for `scripts/local_incremental_sync.js` and GitHub Actions.
+- Verification:
+  - `node --check src\backend\WebApi.js`: PASS.
+  - `npm.cmd test -- tests/status-snapshot-service.test.js tests/legacy-api-coverage.test.js tests/frontend-syntax.test.js`: PASS, 37/37.
+  - `npm.cmd test`: PASS, 117/117.
+- Deployment boundary:
+  - GitHub push will update repository and Actions workflow;
+  - Apps Script production will not receive this hard-disable until `clasp push` / Apps Script deployment is performed.

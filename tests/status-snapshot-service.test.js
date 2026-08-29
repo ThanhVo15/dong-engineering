@@ -177,7 +177,7 @@ test('stale running snapshot keeps known counts when live read hits quota', () =
   assert.equal(calls.readMeta, 1);
 });
 
-test('apiSetAutoSyncEnabled updates snapshot without reading Dropbox metadata', () => {
+test('apiSetAutoSyncEnabled refuses Apps Script auto sync without reading Dropbox metadata', () => {
   const seed = {
     lastKnownProjectCount: 3168,
     lastKnownCursorPresent: true,
@@ -195,8 +195,22 @@ test('apiSetAutoSyncEnabled updates snapshot without reading Dropbox metadata', 
   const stored = JSON.parse(props.store.DONG_LIGHTWEIGHT_SYNC_STATUS_SNAPSHOT);
 
   assert.equal(res.ok, true);
-  assert.equal(res.data.enabled, true);
-  assert.equal(stored.autoSyncEnabled, true);
+  assert.equal(res.data.ok, false);
+  assert.equal(res.data.enabled, false);
+  assert.equal(res.data.code, 'APPS_SCRIPT_INCREMENTAL_DISABLED');
+  assert.equal(stored.autoSyncEnabled, false);
+  assert.equal(calls.dropboxCreate, 0);
+  assert.equal(calls.readMeta, 0);
+});
+
+test('manual Apps Script incremental endpoint is disabled without creating Dropbox client', () => {
+  const { context, calls } = loadWebApiContext();
+
+  const res = context.apiRequestIncrementalSync('token');
+
+  assert.equal(res.accepted, false);
+  assert.equal(res.skipped, true);
+  assert.equal(res.code, 'APPS_SCRIPT_INCREMENTAL_DISABLED');
   assert.equal(calls.dropboxCreate, 0);
   assert.equal(calls.readMeta, 0);
 });

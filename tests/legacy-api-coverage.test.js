@@ -117,7 +117,7 @@ test('auto sync status exposes trigger and last check time', () => {
   assert.doesNotMatch(syncService, /AUTO_SYNC_COOLDOWN/);
   assert.doesNotMatch(syncService, /function\s+autoSyncTick\s*\(/);
   assert.doesNotMatch(webApi, /resetAutoSyncTimerAfterManualSync_/);
-  assert.match(webApi, /function autoSyncTick\(\)[\s\S]*?return SyncService\.syncNow\(client, cacheRepo, config\);/);
+  assert.match(webApi, /function autoSyncTick\(\)[\s\S]*?APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED[\s\S]*?APPS_SCRIPT_INCREMENTAL_DISABLED/);
   assert.match(webApi, /function\s+autoSyncStatus_\s*\(/);
   assert.match(webApi, /triggerInstalled:\s*installed/);
   assert.match(webApi, /var lastCheckedAt = meta\.lastSyncAt \|\| meta\.lastCheckedAt \|\| meta\.lastCacheUpdateAt \|\| meta\.lastFullRebuildAt \|\| ''/);
@@ -125,6 +125,18 @@ test('auto sync status exposes trigger and last check time', () => {
   assert.match(webApi, /autoSync:\s*autoSyncStatus_\(state\.config,\s*state\.meta\)/);
   assert.match(webApi, /issueLog:\s*syncIssueLogFromMeta_\(meta\)/);
   assert.match(webApi, /apiSetAutoSyncEnabled[\s\S]*syncHealth:\s*health/);
+});
+
+test('Apps Script incremental sync endpoints are hard-disabled for GitHub Actions handoff', () => {
+  const syncService = fs.readFileSync('src/backend/SyncService.js', 'utf8');
+  const webApi = fs.readFileSync('src/backend/WebApi.js', 'utf8');
+
+  assert.match(webApi, /APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED = true/);
+  assert.match(webApi, /function\s+appsScriptIncrementalDisabledPayload_\s*\(/);
+  assert.match(webApi, /function\s+apiSyncNow\s*\(\)[\s\S]*?APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED[\s\S]*?APPS_SCRIPT_INCREMENTAL_DISABLED/);
+  assert.match(webApi, /apiSyncNowLegacy_[\s\S]*?APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED[\s\S]*?legacyOk_\(appsScriptIncrementalDisabledPayload_\(\)\)/);
+  assert.match(webApi, /apiSetAutoSyncEnabled[\s\S]*?enabled === true && APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED[\s\S]*?SyncService\.setAutoSync\(false\)/);
+  assert.match(syncService, /function\s+syncNow\s*\(client,\s*cacheRepo,\s*config\)\s*\{[\s\S]*?return syncOnce\(client,\s*cacheRepo,\s*config\);[\s\S]*?\}/);
 });
 
 test('Sync V1 legacy holder is disabled, unreachable, and excluded from Apps Script push', () => {
@@ -148,12 +160,12 @@ test('Sync V1 legacy holder is disabled, unreachable, and excluded from Apps Scr
   assert.match(claspIgnore, /\*\*\/src\/backend\/legacy\/\*\*/);
 });
 
-test('Sync V2 syncOnce is the core sync path and legacy wrappers route to it', () => {
+test('Sync V2 syncOnce remains available for local and GitHub Actions runners', () => {
   const syncService = fs.readFileSync('src/backend/SyncService.js', 'utf8');
   const webApi = fs.readFileSync('src/backend/WebApi.js', 'utf8');
 
   assert.match(syncService, /function\s+syncOnce\s*\(client,\s*cacheRepo,\s*config,\s*options\)/);
   assert.match(syncService, /function\s+syncNow\s*\(client,\s*cacheRepo,\s*config\)\s*\{[\s\S]*?return syncOnce\(client,\s*cacheRepo,\s*config\);[\s\S]*?\}/);
-  assert.match(webApi, /apiSyncNowLegacy_[\s\S]*SyncService\.syncNow\(ctx\.client,\s*ctx\.cacheRepo,\s*ctx\.config\)/);
+  assert.match(webApi, /APPS_SCRIPT_INCREMENTAL_DISABLED/);
   assert.doesNotMatch(webApi, /collectChanges\(client/);
 });
