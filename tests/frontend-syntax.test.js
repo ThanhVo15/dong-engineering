@@ -241,6 +241,13 @@ test('frontend sync status polling is throttled to protect Apps Script UrlFetch 
   assert.doesNotMatch(client, /waitForSyncPublish\(beforeToken, attempt \+ 1\)\); \}, 5000\)/);
 });
 
+test('frontend does not prefetch project detail rows from search results', () => {
+  const client = fs.readFileSync('src/frontend/Client.js.html', 'utf8');
+  assert.match(client, /function queueDetailPrefetch\(jobNo\)\s*{\s*return;\s*}/);
+  assert.doesNotMatch(client, /requestIdleCallback\(runner/);
+  assert.doesNotMatch(client, /var runner = function \(\) \{ requestProjectDetail\(jobNo\)/);
+});
+
 test('save flow updates UI immediately and refreshes only the affected project cache', () => {
   const client = fs.readFileSync('src/frontend/Client.js.html', 'utf8');
   assert.match(client, /apiRefreshProjectCache/);

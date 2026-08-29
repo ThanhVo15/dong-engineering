@@ -84,6 +84,25 @@ test('apiGetProjectIndex reports loaded record count separately from meta count'
   assert.match(webApi, /completedAt = publishPending \? '' : \(meta\.lastSyncAt \|\| meta\.lastCacheUpdateAt \|\| meta\.lastFullRebuildAt \|\| ''\)/);
 });
 
+test('project detail endpoints avoid index/meta reads on the common projectId path', () => {
+  const webApi = fs.readFileSync('src/backend/WebApi.js', 'utf8');
+  const freshnessBody = webApi.slice(
+    webApi.indexOf('function apiCheckProjectFreshness'),
+    webApi.indexOf('function apiApplyProjectPatch')
+  );
+  assert.match(webApi, /function\s+readJobByProjectKey_\s*\(ctx,\s*key\)/);
+  assert.match(webApi, /var detail = projectKey \? ctx\.cacheRepo\.readJob\(projectKey\) : null/);
+  assert.match(webApi, /if \(detail\) return \{ projectId: projectKey, detail: detail, fromDirectJob: true \}/);
+  assert.match(webApi, /var found = readJobByProjectKey_\(ctx,\s*jobNo\)/);
+  assert.doesNotMatch(freshnessBody, /ctx\.cacheRepo\.readMeta\(\)/);
+  assert.match(freshnessBody, /var state = readStatusState_\(ctx\.config,\s*false\)/);
+});
+
+test('index loads refresh the lightweight status snapshot using already-read metadata', () => {
+  const webApi = fs.readFileSync('src/backend/WebApi.js', 'utf8');
+  assert.match(webApi, /function apiGetProjectIndex[\s\S]*?var meta = ctx\.cacheRepo\.readMeta\(\);[\s\S]*?updateStatusSnapshotFromMeta_\(meta,\s*ctx\.config\)/);
+});
+
 test('sync health separates publishing progress from completed cache timestamp', () => {
   const webApi = fs.readFileSync('src/backend/WebApi.js', 'utf8');
   assert.doesNotMatch(webApi, /function\s+countPublishedJobCacheFiles_\s*\(/);

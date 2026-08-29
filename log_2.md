@@ -287,3 +287,25 @@
   - `node --check src\backend\WebApi.js`: PASS.
   - `npm.cmd test -- tests/status-snapshot-service.test.js tests/legacy-api-coverage.test.js tests/frontend-syntax.test.js`: PASS, 41/41.
   - `npm.cmd test`: PASS, 121/121.
+
+## Step 17 - UrlFetch quota reduction for status and project reads
+
+- User reported `Service invoked too many times for one day: urlfetch` while refreshing/opening project data.
+- Repo trace found multiple UrlFetch consumers beyond GitHub dispatch:
+  - `apiGetPublicSyncStatus()` could read Dropbox live metadata when a status snapshot looked stale.
+  - Search/list UI preloaded up to three project detail payloads via `queueDetailPrefetch()`, which downloaded `__db__/jobs/<projectId>.json` even when the user had not opened those projects.
+  - `apiGetProjectDetail()` and `apiCheckProjectFreshness()` read `projects.json` before reading detail, even though the frontend normally passes `projectId`.
+  - Every new Apps Script execution refreshed Dropbox OAuth access token before Dropbox content calls.
+- Changes:
+  - `apiGetPublicSyncStatus()` now uses the `PropertiesService` snapshot only and does not create a Dropbox client.
+  - `queueDetailPrefetch()` is disabled so searching does not silently burn detail downloads.
+  - Project detail/freshness now tries `readJob(projectId)` first and falls back to `projects.json` lookup only when needed.
+  - Freshness checks use lightweight status snapshot instead of reading Dropbox `meta.json`.
+  - `apiGetProjectIndex()` refreshes the lightweight status snapshot using the metadata it already read.
+  - `DropboxClient` caches short-lived Dropbox access tokens in Script Properties until near expiry to avoid repeated `/oauth2/token` calls across Apps Script executions.
+- Verification:
+  - `node --check src\backend\DropboxClient.js`: PASS.
+  - `node --check src\backend\WebApi.js`: PASS.
+  - `npm.cmd test -- tests/dropbox-client-token-cache.test.js tests/status-snapshot-service.test.js tests/frontend-syntax.test.js tests/legacy-api-coverage.test.js tests/gas-runtime-contract.test.js`: PASS, 47/47.
+- Deployment boundary:
+  - Local code is ready for full test, git push, and Apps Script deployment.

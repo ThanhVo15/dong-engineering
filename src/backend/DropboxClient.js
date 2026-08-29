@@ -1,6 +1,9 @@
 var DropboxClient = (function () {
   'use strict';
 
+  var ACCESS_TOKEN_CACHE_KEY_PREFIX = 'DONG_DROPBOX_ACCESS_TOKEN_CACHE';
+  var ACCESS_TOKEN_EXPIRY_SKEW_MS = 60 * 1000;
+
   function create(config, transport) {
     return new Client(config, transport);
   }
@@ -10,6 +13,50 @@ var DropboxClient = (function () {
     this.transport = transport || {};
     this._accessToken = '';
   }
+
+  function safeKeyPart(value) {
+    return String(value || 'default').replace(/[^A-Za-z0-9_]+/g, '_').slice(0, 40) || 'default';
+  }
+
+  function tokenCacheKey(config, dropboxConfig) {
+    return ACCESS_TOKEN_CACHE_KEY_PREFIX + '_' + safeKeyPart(config && config.environment || 'default') + '_' + safeKeyPart(dropboxConfig && dropboxConfig.appKey || 'app');
+  }
+
+  function scriptProperties() {
+    if (typeof PropertiesService === 'undefined') return null;
+    try { return PropertiesService.getScriptProperties(); } catch (err) { return null; }
+  }
+
+  Client.prototype._cachedAccessToken = function (dropboxConfig) {
+    if (this.transport.disableTokenCache === true) return '';
+    var p = scriptProperties();
+    if (!p) return '';
+    try {
+      var raw = p.getProperty(tokenCacheKey(this.config, dropboxConfig));
+      var cached = raw ? JSON.parse(raw) : null;
+      if (!cached || cached.appKey !== dropboxConfig.appKey || !cached.accessToken) return '';
+      if (Number(cached.expiresAt || 0) <= Date.now() + ACCESS_TOKEN_EXPIRY_SKEW_MS) return '';
+      return cached.accessToken;
+    } catch (err) {
+      return '';
+    }
+  };
+
+  Client.prototype._writeCachedAccessToken = function (dropboxConfig, body) {
+    if (this.transport.disableTokenCache === true) return;
+    var p = scriptProperties();
+    if (!p) return;
+    var token = body && body.access_token || '';
+    if (!token) return;
+    try {
+      var expiresInMs = Math.max(60, Number(body.expires_in || 14400) - 120) * 1000;
+      p.setProperty(tokenCacheKey(this.config, dropboxConfig), JSON.stringify({
+        appKey: dropboxConfig.appKey,
+        accessToken: token,
+        expiresAt: Date.now() + expiresInMs
+      }));
+    } catch (err) {}
+  };
 
   Client.prototype._fetch = function (url, options) {
     if (this.transport.fetch) return this.transport.fetch(url, options);
@@ -43,6 +90,8 @@ var DropboxClient = (function () {
     if (this._accessToken) return this._accessToken;
     var d = this.config.dropbox || this.config;
     if (!d.appKey || !d.appSecret || !d.refreshToken) throw new Error('Dropbox credentials are not configured.');
+    this._accessToken = this._cachedAccessToken(d);
+    if (this._accessToken) return this._accessToken;
     var body = this._json('api.dropboxapi.com', '/oauth2/token', {
       grant_type: 'refresh_token',
       refresh_token: d.refreshToken,
@@ -51,6 +100,7 @@ var DropboxClient = (function () {
     }, '', true);
     this._accessToken = body.access_token || '';
     if (!this._accessToken) throw new Error('Dropbox access token refresh failed.');
+    this._writeCachedAccessToken(d, body);
     return this._accessToken;
   };
 

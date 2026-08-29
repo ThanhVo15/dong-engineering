@@ -1441,15 +1441,7 @@
     return promise;
   }
   function queueDetailPrefetch(jobNo) {
-    if (!jobNo || String(jobNo) === String(currentProjectKey() || '')) return;
-    var cached = cachedDetail(jobNo);
-    if (cached && cached.bundle && cached.at && (Date.now() - cached.at < DETAIL_TTL_MS)) return;
-    var runner = function () { requestProjectDetail(jobNo).catch(function () {}); };
-    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
-      window.requestIdleCallback(runner, { timeout: 1200 });
-    } else {
-      setTimeout(runner, 120);
-    }
+    return;
   }
   function prefetchTopResults(items) {
     items = items || [];

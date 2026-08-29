@@ -115,7 +115,7 @@ test('apiGetPublicSyncStatus reads PropertiesService snapshot without Dropbox', 
   assert.equal(calls.readMeta, 0);
 });
 
-test('stale running snapshot refreshes from live Dropbox metadata', () => {
+test('apiGetPublicSyncStatus keeps stale snapshot without live Dropbox metadata', () => {
   const seed = {
     lastKnownProjectCount: 3168,
     lastKnownCursorPresent: true,
@@ -125,32 +125,22 @@ test('stale running snapshot refreshes from live Dropbox metadata', () => {
     lastSyncError: null,
     lastStatusSnapshotAt: '2000-01-01T00:00:00.000Z'
   };
-  const { context, props, calls } = loadWebApiContext({
+  const { context, calls } = loadWebApiContext({
     DONG_LIGHTWEIGHT_SYNC_STATUS_SNAPSHOT: JSON.stringify(seed)
-  }, {
-    readMetaResult: {
-      syncStatus: 'idle',
-      cursor: 'cursor-new',
-      projectCount: 3157,
-      lastSyncAt: '2026-08-26T03:37:33.000Z'
-    }
   });
 
   const res = context.apiGetPublicSyncStatus();
-  const stored = JSON.parse(props.store.DONG_LIGHTWEIGHT_SYNC_STATUS_SNAPSHOT);
 
   assert.equal(res.ok, true);
-  assert.equal(res.data.syncStatus.status, 'idle');
-  assert.equal(res.data.syncStatus.projectCount, 3157);
-  assert.equal(res.data.fromSnapshot, false);
+  assert.equal(res.data.syncStatus.status, 'stale_running');
+  assert.equal(res.data.syncStatus.projectCount, 3168);
+  assert.equal(res.data.fromSnapshot, true);
   assert.equal(res.data.statusStale, false);
-  assert.equal(stored.lastSyncStatus, 'idle');
-  assert.equal(stored.lastKnownProjectCount, 3157);
-  assert.equal(calls.dropboxCreate, 1);
-  assert.equal(calls.readMeta, 1);
+  assert.equal(calls.dropboxCreate, 0);
+  assert.equal(calls.readMeta, 0);
 });
 
-test('status fallback preserves unknown values instead of fake zero on UrlFetch quota error', () => {
+test('apiGetPublicSyncStatus returns unknown snapshot without live Dropbox fallback', () => {
   const { context, calls } = loadWebApiContext();
 
   const res = context.apiGetPublicSyncStatus();
@@ -159,12 +149,12 @@ test('status fallback preserves unknown values instead of fake zero on UrlFetch 
   assert.equal(res.data.syncStatus.projectCount, null);
   assert.equal(res.data.syncStatus.cursorPresent, null);
   assert.equal(res.data.statusStale, true);
-  assert.match(res.data.lastLiveReadError, /urlfetch/i);
-  assert.equal(calls.dropboxCreate, 1);
-  assert.equal(calls.readMeta, 1);
+  assert.equal(res.data.lastLiveReadError, '');
+  assert.equal(calls.dropboxCreate, 0);
+  assert.equal(calls.readMeta, 0);
 });
 
-test('stale running snapshot keeps known counts when live read hits quota', () => {
+test('apiGetPublicSyncStatus keeps stale known counts without live read', () => {
   const seed = {
     lastKnownProjectCount: 3157,
     lastKnownCursorPresent: true,
@@ -184,12 +174,11 @@ test('stale running snapshot keeps known counts when live read hits quota', () =
   assert.equal(res.ok, true);
   assert.equal(res.data.syncStatus.projectCount, 3157);
   assert.equal(res.data.syncStatus.cursorPresent, true);
-  assert.equal(res.data.statusStale, true);
-  assert.match(res.data.lastLiveReadError, /urlfetch/i);
+  assert.equal(res.data.statusStale, false);
+  assert.equal(res.data.lastLiveReadError, '');
   assert.equal(stored.lastKnownProjectCount, 3157);
-  assert.equal(stored.lastLiveReadError, res.data.lastLiveReadError);
-  assert.equal(calls.dropboxCreate, 1);
-  assert.equal(calls.readMeta, 1);
+  assert.equal(calls.dropboxCreate, 0);
+  assert.equal(calls.readMeta, 0);
 });
 
 test('apiSetAutoSyncEnabled installs Apps Script dispatcher trigger without reading Dropbox metadata', () => {

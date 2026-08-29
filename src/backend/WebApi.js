@@ -731,6 +731,15 @@ function findProjectId_(ctx, key) {
   return key;
 }
 
+function readJobByProjectKey_(ctx, key) {
+  var projectKey = String(key || '').trim();
+  var detail = projectKey ? ctx.cacheRepo.readJob(projectKey) : null;
+  if (detail) return { projectId: projectKey, detail: detail, fromDirectJob: true };
+  var id = findProjectId_(ctx, projectKey);
+  detail = id ? ctx.cacheRepo.readJob(id) : null;
+  return { projectId: id || projectKey, detail: detail, fromDirectJob: false };
+}
+
 function withDetailCompat_(detail) {
   detail = detail || {};
   detail.filename = detail.filename || detail.sourceRefs && detail.sourceRefs.project && detail.sourceRefs.project.filename || '';
@@ -751,6 +760,7 @@ function apiGetProjectIndex(token) {
     var ctx = makeBackendContext();
     var projects = ctx.cacheRepo.readProjects();
     var meta = ctx.cacheRepo.readMeta();
+    updateStatusSnapshotFromMeta_(meta, ctx.config);
     var records = [];
     for (var key in projects) if (Object.prototype.hasOwnProperty.call(projects, key)) records.push(projects[key]);
     records.sort(function (a, b) { return String(a.jobNo || '').localeCompare(String(b.jobNo || ''), undefined, { numeric: true }); });
@@ -791,10 +801,9 @@ function apiGetProjectDetail(token, jobNo, options) {
   return catchLegacy_(function () {
     if (token) requireSession_(token);
     var ctx = makeBackendContext();
-    var id = findProjectId_(ctx, jobNo);
-    var detail = ctx.cacheRepo.readJob(id);
-    if (!detail) throw { code: 'NOT_FOUND', message: 'Project cache not found.' };
-    return legacyOk_(withDetailCompat_(detail));
+    var found = readJobByProjectKey_(ctx, jobNo);
+    if (!found.detail) throw { code: 'NOT_FOUND', message: 'Project cache not found.' };
+    return legacyOk_(withDetailCompat_(found.detail));
   });
 }
 
@@ -802,13 +811,14 @@ function apiCheckProjectFreshness(token, jobNo, clientVersion, options) {
   return catchLegacy_(function () {
     requireSession_(token);
     var ctx = makeBackendContext();
-    var id = findProjectId_(ctx, jobNo);
-    var detail = ctx.cacheRepo.readJob(id);
+    var found = readJobByProjectKey_(ctx, jobNo);
+    var detail = found.detail;
     var active = withDetailCompat_(detail || {});
+    var state = readStatusState_(ctx.config, false);
     return legacyOk_({
       state: active.publishToken && clientVersion && clientVersion.publishToken && active.publishToken !== clientVersion.publishToken ? 'server_update_available' : 'fresh',
       activeVersion: { publishToken: active.publishToken || '', baseRev: active.baseRev || '', jobNo: active.jobNo || jobNo },
-      syncStatus: legacySyncStatus_(ctx.cacheRepo.readMeta())
+      syncStatus: legacySyncStatus_(state.meta)
     });
   });
 }
@@ -867,7 +877,7 @@ function apiRefreshProjectCache(token, projectIdOrJobNo) {
 
 function apiGetPublicSyncStatus() {
   return catchLegacy_(function () {
-    var state = readStatusState_(AppConfig.current(), true);
+    var state = readStatusState_(AppConfig.current(), false);
     return legacyOk_({
       syncStatus: legacySyncStatus_(state.meta),
       syncHealth: syncSnapshot_(state.meta, state.config, state.client),
