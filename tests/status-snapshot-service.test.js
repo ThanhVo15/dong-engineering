@@ -41,9 +41,13 @@ function loadWebApiContext(initialProps = {}, options = {}) {
       fetch(url, fetchOptions) {
         calls.urlFetch += 1;
         calls.lastFetch = { url, options: fetchOptions };
+        const isRunStatus = String(url).includes('/actions/workflows/dropbox-incremental-sync.yml/runs');
+        const body = isRunStatus
+          ? JSON.stringify({ workflow_runs: options.githubRuns || [] })
+          : (options.githubResponseBody || '');
         return {
           getResponseCode: () => options.githubStatusCode || 204,
-          getContentText: () => options.githubResponseBody || ''
+          getContentText: () => body
         };
       }
     },
@@ -261,6 +265,35 @@ test('apiRequestIncrementalSync dispatches GitHub Actions without creating Dropb
   assert.equal(calls.urlFetch, 1);
   assert.equal(calls.dropboxCreate, 0);
   assert.equal(calls.readMeta, 0);
+});
+
+test('apiGetGitHubSyncStatus reads repository_dispatch completion without Dropbox', () => {
+  const { context, calls } = loadWebApiContext({
+    GITHUB_DISPATCH_TOKEN: 'token',
+    GITHUB_DISPATCH_REPOSITORY: 'ThanhVo15/dong-engineering'
+  }, {
+    githubRuns: [{
+      id: 123,
+      run_number: 9,
+      status: 'completed',
+      conclusion: 'success',
+      event: 'repository_dispatch',
+      created_at: '2026-08-29T11:44:23Z',
+      updated_at: '2026-08-29T11:44:50Z',
+      html_url: 'https://github.com/ThanhVo15/dong-engineering/actions/runs/123'
+    }]
+  });
+
+  const res = context.apiGetGitHubSyncStatus('token', '2026-08-29T11:44:00Z');
+
+  assert.equal(res.ok, true);
+  assert.equal(res.data.status, 'completed');
+  assert.equal(res.data.conclusion, 'success');
+  assert.equal(res.data.runNumber, 9);
+  assert.equal(calls.urlFetch, 1);
+  assert.equal(calls.dropboxCreate, 0);
+  assert.equal(calls.readMeta, 0);
+  assert.match(calls.lastFetch.url, /actions\/workflows\/dropbox-incremental-sync\.yml\/runs/);
 });
 
 test('apiSyncNow direct Apps Script incremental endpoint remains disabled without creating Dropbox client', () => {

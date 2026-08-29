@@ -39,6 +39,7 @@ test('WebApi keeps the required legacy admin/config/auth surface', () => {
     'apiSaveDropboxPathConfig',
     'apiTestDropboxConnection',
     'apiRequestIncrementalSync',
+    'apiGetGitHubSyncStatus',
     'apiRefreshProjectCache',
     'apiGetSyncIssueLog',
     'apiSetAutoSyncEnabled'

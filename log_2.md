@@ -276,3 +276,14 @@
   - `npm.cmd test -- tests/status-snapshot-service.test.js tests/legacy-api-coverage.test.js tests/frontend-syntax.test.js`: PASS, 40/40.
   - `npm.cmd test`: PASS, 120/120.
 - Deployment boundary: local code is ready, but Apps Script production will not dispatch GitHub until this source is pushed/deployed with `clasp` and the GitHub token property is set.
+
+## Step 16 - UI waits for GitHub run completion instead of stale Dropbox status
+
+- User confirmed local GitHub API dispatch works after token permission was corrected: `repository_dispatch` and `workflow_dispatch` returned HTTP 204, and GitHub Actions runs completed successfully.
+- Found UI wait bug: after dispatch, the browser waited for `apiGetPublicSyncStatus()` to show a cache timestamp newer than the dispatch time, but Apps Script can return a fresh `PropertiesService` snapshot that predates the GitHub runner's Dropbox cache update.
+- Added `apiGetGitHubSyncStatus(token, triggeredAt)` to query the GitHub Actions workflow runs for `repository_dispatch` completion without creating a Dropbox client.
+- Updated the frontend GitHub-dispatch wait path to poll GitHub run status; once the run is `completed/success`, it refreshes the project index.
+- Verification:
+  - `node --check src\backend\WebApi.js`: PASS.
+  - `npm.cmd test -- tests/status-snapshot-service.test.js tests/legacy-api-coverage.test.js tests/frontend-syntax.test.js`: PASS, 41/41.
+  - `npm.cmd test`: PASS, 121/121.

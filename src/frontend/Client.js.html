@@ -903,29 +903,17 @@
     var prefix = by === 'auto-sync' ? 'Auto Sync' : 'Sync';
     return prefix + ': ' + formatRefresh(iso);
   }
-  function syncCompletedAfter(st, triggeredAt) {
-    if (!triggeredAt) return false;
-    var completedAt = Date.parse(syncRefreshIso(st) || '');
-    var requestedAt = Date.parse(triggeredAt || '');
-    return isFinite(completedAt) && isFinite(requestedAt) && completedAt >= requestedAt;
-  }
   function waitForGitHubDispatchedSync(triggeredAt, attempt) {
     attempt = Number(attempt || 0);
-    return gas('apiGetPublicSyncStatus').then(function (res) {
-      var payload = dataOf(res);
-      var st = payload && payload.syncStatus || {};
-      var state = String(st.state || '').toLowerCase();
-      if (S.cfg) {
-        S.cfg.syncStatus = st;
-        if (payload && payload.syncHealth) S.cfg.syncHealth = payload.syncHealth;
-        if (payload && payload.syncHealth) S.syncHealth = payload.syncHealth;
-        if (payload && payload.autoSync) S.cfg.autoSync = payload.autoSync;
-      }
+    return gas('apiGetGitHubSyncStatus', S.adminToken, triggeredAt).then(function (res) {
+      var st = dataOf(res) || {};
+      var state = String(st.status || '').toLowerCase();
+      var conclusion = String(st.conclusion || '').toLowerCase();
       renderHeader();
-      if (syncCompletedAfter(st, triggeredAt)) return st;
-      if (state === 'failed' || state === 'failed_timeout' || state === 'cancelled') return st;
+      if (state === 'completed' && conclusion === 'success') return { state: 'completed', githubRun: st };
+      if (state === 'completed') return { state: 'failed', errorCode: 'GITHUB_RUN_' + (conclusion || 'FAILED').toUpperCase(), githubRun: st };
       if (attempt >= 80) return { state: 'failed_timeout', errorCode: 'GITHUB_SYNC_TIMEOUT' };
-      setSync('syncing', 'GitHub Actions sync is running...');
+      setSync('syncing', st.found === false ? 'Waiting for GitHub Actions sync...' : 'GitHub Actions sync is running...');
       return new Promise(function (resolve) {
         setTimeout(function () { resolve(waitForGitHubDispatchedSync(triggeredAt, attempt + 1)); }, SYNC_WAIT_PUBLISH_MS);
       });

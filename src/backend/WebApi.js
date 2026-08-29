@@ -96,6 +96,106 @@ function triggerGitHubDropboxSync_(source) {
   };
 }
 
+function githubDispatchFetch_(url, options) {
+  var cfg = githubDispatchConfig_();
+  if (!cfg.token) {
+    return {
+      ok: false,
+      code: 'GITHUB_DISPATCH_TOKEN_MISSING',
+      errorCode: 'GITHUB_DISPATCH_TOKEN_MISSING',
+      message: 'Set GITHUB_DISPATCH_TOKEN in Apps Script Properties to trigger GitHub Actions.'
+    };
+  }
+  if (typeof UrlFetchApp === 'undefined') {
+    return {
+      ok: false,
+      code: 'GITHUB_DISPATCH_UNAVAILABLE',
+      errorCode: 'GITHUB_DISPATCH_UNAVAILABLE',
+      message: 'UrlFetchApp is not available; cannot call GitHub Actions.'
+    };
+  }
+  options = options || {};
+  options.headers = options.headers || {};
+  options.headers.Authorization = 'Bearer ' + cfg.token;
+  options.headers.Accept = 'application/vnd.github+json';
+  options.headers['X-GitHub-Api-Version'] = '2022-11-28';
+  options.muteHttpExceptions = true;
+  try {
+    var res = UrlFetchApp.fetch(url, options);
+    var status = res.getResponseCode();
+    var body = '';
+    try { body = String(res.getContentText() || ''); } catch (ignoreBody) {}
+    return { ok: status >= 200 && status < 300, statusCode: status, body: body };
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'GITHUB_DISPATCH_FETCH_FAILED',
+      errorCode: 'GITHUB_DISPATCH_FETCH_FAILED',
+      message: err && err.message || String(err || 'GitHub request failed.')
+    };
+  }
+}
+
+function githubWorkflowRunStatus_(triggeredAt) {
+  var cfg = githubDispatchConfig_();
+  var requestedAt = Date.parse(triggeredAt || '') || 0;
+  var minCreatedAt = requestedAt ? requestedAt - 60 * 1000 : 0;
+  var url = 'https://api.github.com/repos/' + cfg.repository + '/actions/workflows/dropbox-incremental-sync.yml/runs?event=repository_dispatch&per_page=10';
+  var fetched = githubDispatchFetch_(url, { method: 'get' });
+  if (!fetched.ok) {
+    return {
+      ok: false,
+      status: 'unknown',
+      code: fetched.code || 'GITHUB_RUN_STATUS_FAILED',
+      errorCode: fetched.errorCode || 'GITHUB_RUN_STATUS_FAILED',
+      statusCode: fetched.statusCode || null,
+      message: fetched.message || ('GitHub workflow status check failed with HTTP ' + fetched.statusCode + '.')
+    };
+  }
+  var parsed = {};
+  try { parsed = JSON.parse(fetched.body || '{}') || {}; } catch (err) {
+    return { ok: false, status: 'unknown', code: 'GITHUB_RUN_STATUS_PARSE_FAILED', errorCode: 'GITHUB_RUN_STATUS_PARSE_FAILED', message: 'Could not parse GitHub workflow run status.' };
+  }
+  var runs = parsed.workflow_runs || [];
+  var candidates = [];
+  for (var i = 0; i < runs.length; i++) {
+    var run = runs[i] || {};
+    var created = Date.parse(run.created_at || '') || 0;
+    if (!minCreatedAt || created >= minCreatedAt) candidates.push(run);
+  }
+  if (!candidates.length) {
+    return { ok: true, status: 'queued', conclusion: '', found: false, message: 'Waiting for GitHub Actions run to appear.' };
+  }
+  candidates.sort(function (a, b) { return Date.parse(b.created_at || '') - Date.parse(a.created_at || ''); });
+  var selected = null;
+  for (var activeIdx = 0; activeIdx < candidates.length; activeIdx++) {
+    if (String(candidates[activeIdx].status || '') !== 'completed') {
+      selected = candidates[activeIdx];
+      break;
+    }
+  }
+  if (!selected) {
+    for (var successIdx = 0; successIdx < candidates.length; successIdx++) {
+      if (candidates[successIdx].conclusion === 'success') {
+        selected = candidates[successIdx];
+        break;
+      }
+    }
+  }
+  selected = selected || candidates[0];
+  return {
+    ok: true,
+    found: true,
+    runNumber: selected.run_number || null,
+    runId: selected.id || null,
+    status: selected.status || 'unknown',
+    conclusion: selected.conclusion || '',
+    createdAt: selected.created_at || '',
+    updatedAt: selected.updated_at || '',
+    url: selected.html_url || ''
+  };
+}
+
 function appsScriptIncrementalDisabledPayload_() {
   return {
     accepted: false,
@@ -776,6 +876,13 @@ function apiGetPublicSyncStatus() {
       statusStale: state.statusStale === true || state.meta.statusStale === true,
       lastLiveReadError: state.lastLiveReadError || state.meta.lastLiveReadError || ''
     });
+  });
+}
+
+function apiGetGitHubSyncStatus(token, triggeredAt) {
+  return catchLegacy_(function () {
+    requireSession_(token);
+    return legacyOk_(githubWorkflowRunStatus_(triggeredAt));
   });
 }
 
