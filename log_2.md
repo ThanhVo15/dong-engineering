@@ -248,3 +248,13 @@
 - GitHub Actions schedule is best-effort and can be delayed/dropped during high-load periods, especially at the start of an hour.
 - Workflow cron changed from `*/5 * * * *` to `1,6,11,16,21,26,31,36,41,46,51,56 * * * *`.
 - This still runs every 5 minutes, but avoids minute `00`.
+
+## Step 14 - External cron fallback trigger added
+
+- User reported manual GitHub Actions runs worked but automatic schedule runs were still not visible.
+- Workflow updated with:
+  - `run-name: Dropbox Incremental Sync (${{ github.event_name }})` to make the trigger type visible in each run;
+  - `repository_dispatch` trigger type `dropbox-incremental-sync`;
+  - minimal `permissions: contents: read`.
+- Native GitHub `schedule` remains active.
+- If native GitHub schedule remains unreliable, an external free cron can POST a `repository_dispatch` event every 5 minutes to trigger the same workflow.
