@@ -1,0 +1,35 @@
+{
+  "scriptId": "1Y2fkWOvdX_TBrWbJMdaD5toyYTKuDzJYxLbN8UUi_L-sHfFEj9PZWeew",
+  "rootDir": "",
+  "scriptExtensions": [
+    ".js",
+    ".gs"
+  ],
+  "htmlExtensions": [
+    ".html"
+  ],
+  "jsonExtensions": [
+    ".json"
+  ],
+  "filePushOrder": [
+    "src/backend/utils/Utils.js",
+    "src/backend/parsers/PChronosParser.js",
+    "src/backend/parsers/AC2Parser.js",
+    "src/backend/parsers/TChronosParser.js",
+    "src/backend/ProjectService.js",
+    "src/backend/CacheService.js",
+    "src/backend/FullRebuildService.js",
+    "src/backend/Config.js",
+    "src/backend/DropboxClient.js",
+    "src/backend/CacheRepository.js",
+    "src/backend/StatusSnapshotService.js",
+    "src/backend/SourceService.js",
+    "src/backend/SaveService.js",
+    "src/backend/SyncService.js",
+    "src/backend/AuthService.js",
+    "src/backend/WebApi.js",
+    "src/frontend/SearchClient.html",
+    "src/backend/App.js"
+  ],
+  "skipSubdirectories": false
+}

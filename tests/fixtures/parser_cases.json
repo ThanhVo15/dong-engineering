@@ -1,0 +1,113 @@
+{
+  "pChronos": [
+    {
+      "name": "basic project from screenshot",
+      "filename": "260174~COMPLETED~45954~46173~@RonaldTruong.txt",
+      "content": "REMODEL|3992 SAN BONITO AVE, LOS ALAMITOS, CA 90720|Steven Hong|Steven Hong|4/21/2026|6/12/2026|Remodel|Roof DL:14, Roof LL:20; Ceiling DL:4; Ceiling LL:0; Floor DL:13, Floor LL:40 Foundation :SLAB ON GRADE; Keep the existing Foundation; Keep the existing Roof; Keep the existing Floor; Roof Conventional Framing; Floor Solid 2 x 8\nSOW: Structural\n260421: No BG\n260507: please follow skerming sketch. no new shear wall needed.\n260512: US REVIEW PACKAGE (Structural)|COMPLETED|12|100|HUYPHAM1 changed status",
+      "expected": {
+        "jobNo": "260174",
+        "status": "COMPLETED",
+        "assignee": "RonaldTruong",
+        "project": {
+          "P1_jobNumber": "260174",
+          "P3_jobName": "REMODEL",
+          "P4_location": "3992 SAN BONITO AVE, LOS ALAMITOS, CA 90720",
+          "P6_status": "COMPLETED",
+          "P7_estimate": "12",
+          "P8_architect": "Steven Hong",
+          "P9_customer": "Steven Hong",
+          "P10_startDate": "4/21/2026",
+          "P11_endDate": "6/12/2026",
+          "P12_type": "Remodel",
+          "P13_assignee": "RonaldTruong"
+        }
+      }
+    }
+  ],
+  "ac2": [
+    {
+      "name": "variant A packed account and sent",
+      "filename": "260174~01~COMPLETED~46157~UNPAID~1632;1st Sent~Steven Hong.txt",
+      "content": "UNPAID~4/19/2026~5/15/2026|mocoo~mineooco~mocoo|01~A retainer prior to start Remodel (Structural)~mnocoo~mnocoo|A retainer prior to start Remodel (Structural)|mnocoo|1",
+      "expected": {
+        "jobNo": "260174",
+        "code": "01",
+        "status": "COMPLETED",
+        "dateString": "5/15/2026",
+        "payment": "UNPAID",
+        "account": "1632",
+        "sent": "1st Sent",
+        "contact": "Steven Hong",
+        "description": "A retainer prior to start Remodel (Structural)",
+        "plannedHours": 1
+      }
+    },
+    {
+      "name": "second code matching time row",
+      "filename": "260174~02~COMPLETED~46157~UNPAID~1632;1st Sent~Steven Hong.txt",
+      "content": "meta|code|02|Completion of O's for 1st city submittal Remodel (Structural)|planned|4|",
+      "expected": {
+        "jobNo": "260174",
+        "code": "02",
+        "status": "COMPLETED",
+        "dateString": "5/15/2026",
+        "payment": "UNPAID",
+        "account": "1632",
+        "sent": "1st Sent",
+        "contact": "Steven Hong",
+        "description": "Completion of O's for 1st city submittal Remodel (Structural)",
+        "plannedHours": 4
+      }
+    },
+    {
+      "name": "variant B separate account and sent",
+      "filename": "260174~AC~COMPLETED~46145~NON CHARGE~100~001~000.txt",
+      "content": "meta|code|AC|Coordination/administration provide note when using this code (Administration)|planned|2|",
+      "expected": {
+        "jobNo": "260174",
+        "code": "AC",
+        "status": "COMPLETED",
+        "dateString": "5/3/2026",
+        "payment": "NON CHARGE",
+        "account": "100",
+        "sent": "001",
+        "contact": "000",
+        "description": "Coordination/administration provide note when using this code (Administration)",
+        "plannedHours": 2
+      }
+    },
+    {
+      "name": "description edited in code payload field",
+      "filename": "220004~03~COMPLETED~45302~PAID~0683;1st Sent~Ken Pham.txt",
+      "content": "PAID~6/11/2024~1/11/2024|mocoo~mgpioocoo~mgpioocoo|01~QA_TXT_AC2_220004~1~mipvvocoo~mipvvocoo|soil compaction check, report, survey staking, rough line & grade, certificates (Line & Grade;Soil Compaction)|mipvvocoo|",
+      "expected": {
+        "jobNo": "220004",
+        "code": "03",
+        "status": "COMPLETED",
+        "dateString": "1/11/2024",
+        "payment": "PAID",
+        "account": "0683",
+        "sent": "1st Sent",
+        "contact": "Ken Pham",
+        "description": "QA_TXT_AC2_220004",
+        "plannedHours": 1
+      }
+    }
+  ],
+  "tChronos": [
+    {
+      "name": "time row with tail code",
+      "filename": "260174~Plan 1~AnhTran~Structural~46154~1~~02.txt",
+      "content": "",
+      "expected": {
+        "jobNo": "260174",
+        "plan": "Plan 1",
+        "account": "AnhTran",
+        "task": "Structural",
+        "dateString": "5/12/2026",
+        "hours": 1,
+        "code": "02"
+      }
+    }
+  ]
+}

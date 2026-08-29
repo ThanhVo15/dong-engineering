@@ -1,0 +1,278 @@
+<script>
+/* Pure browser helpers kept separate so autocomplete/P1 behavior can be tested in Node. */
+(function (root) {
+  'use strict';
+  function text(value) { return String(value == null ? '' : value); }
+  function normalizeSearchText(value) {
+    var s = text(value);
+    try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (ignoreNormalize) {}
+    s = s.replace(/[\u0111\u0110]/g, function (ch) { return ch === '\u0110' ? 'D' : 'd'; });
+    return s.toLocaleLowerCase()
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  function lower(value) { return normalizeSearchText(value); }
+  function queryTokens(query) { return normalizeSearchText(query).split(/\s+/).filter(Boolean); }
+  function matchesTokens(haystack, tokens) {
+    haystack = normalizeSearchText(haystack);
+    for (var i = 0; i < (tokens || []).length; i++) if (haystack.indexOf(tokens[i]) < 0) return false;
+    return true;
+  }
+  function parseJobFromFilename(filename) {
+    var first = text(filename).replace(/^.*\//, '').split('~')[0];
+    return first && first.toLowerCase() !== 'undefined' ? first : '';
+  }
+  function resolveJobNo(bundle, selectedJobNo) {
+    var project = bundle && bundle.project || {};
+    return text(
+      project.P1_jobNumber ||
+      project.jobNo ||
+      selectedJobNo ||
+      bundle && bundle.jobNo ||
+      parseJobFromFilename(bundle && (bundle.filename || bundle.path))
+    ).trim();
+  }
+  function normalizeRecord(record) {
+    record = record || {};
+    var copy = {};
+    for (var k in record) if (Object.prototype.hasOwnProperty.call(record, k)) copy[k] = record[k];
+    copy.jobNo = text(copy.jobNo || copy.P1_jobNumber).trim();
+    copy.projectId = text(copy.projectId || copy.jobNo).trim();
+    copy.codeHints = copy.codeHints || [];
+    copy.codesText = copy.codesText || copy.codeHints.map(function (h) {
+      return [h.code, h.status, h.payment, h.account, h.contact, h.description].join(' ');
+    }).join(' ');
+    copy.locationNormalized = copy.locationNormalized || normalizeSearchText(copy.location || '');
+    copy.searchText = copy.searchText || normalizeSearchText([
+      copy.projectId, copy.jobNo, copy.jobName, copy.customer, copy.architect, copy.location,
+      copy.status, copy.assignee, copy.type, copy.searchHints, copy.codesText
+    ].join(' '));
+    copy._searchText = normalizeSearchText(copy.searchText);
+    return copy;
+  }
+  function prepareIndex(records) { return (records || []).map(normalizeRecord); }
+  function search(records, query, limit) {
+    var q = normalizeSearchText(query);
+    var words = queryTokens(query);
+    var matches = [];
+    if (!words.length) return { total: 0, items: [] };
+    for (var i = 0; i < (records || []).length; i++) {
+      var record = records[i]._searchText ? records[i] : normalizeRecord(records[i]);
+      if (matchesTokens(record._searchText, words)) {
+        record._matchedCode = '';
+        for (var h = 0; h < (record.codeHints || []).length; h++) {
+          var hintText = normalizeSearchText([
+            record.codeHints[h].code, record.codeHints[h].status, record.codeHints[h].payment,
+            record.codeHints[h].account, record.codeHints[h].contact, record.codeHints[h].description
+          ].join(' '));
+          if (matchesTokens(hintText, words)) { record._matchedCode = record.codeHints[h].code || ''; break; }
+        }
+        matches.push(record);
+      }
+    }
+    matches.sort(function (a, b) {
+      var aq = lower(a.jobNo) === q ? -2 : lower(a.jobNo).indexOf(q) === 0 ? -1 : 0;
+      var bq = lower(b.jobNo) === q ? -2 : lower(b.jobNo).indexOf(q) === 0 ? -1 : 0;
+      return aq - bq || text(a.jobNo).localeCompare(text(b.jobNo), undefined, { numeric: true });
+    });
+    return { total: matches.length, items: matches.slice(0, limit || 20) };
+  }
+  function findExactJob(records, jobNo) {
+    var q = text(jobNo).trim();
+    if (!q) return null;
+    var exactProject = null;
+    var exactJobs = [];
+    for (var i = 0; i < (records || []).length; i++) {
+      var record = records[i]._searchText ? records[i] : normalizeRecord(records[i]);
+      if (text(record.projectId).trim() === q) exactProject = record;
+      if (text(record.jobNo).trim() === q) exactJobs.push(record);
+    }
+    if (exactProject) return exactProject;
+    if (!exactJobs.length) return null;
+    exactJobs.sort(function (a, b) {
+      return Date.parse(b.modified || b.updatedAt || '') - Date.parse(a.modified || a.updatedAt || '') ||
+        text(a.projectId || a.jobNo).localeCompare(text(b.projectId || b.jobNo));
+    });
+    return exactJobs[0];
+  }
+  function locationRank(record, query, tokens) {
+    var loc = record.locationNormalized || normalizeSearchText(record.location || '');
+    if (!loc) return 99;
+    if (loc === query) return 0;
+    if (loc.indexOf(query) === 0) return 1;
+    var parts = loc.split(/\s+/).filter(Boolean);
+    for (var t = 0; t < (tokens || []).length; t++) {
+      var ok = false;
+      for (var p = 0; p < parts.length; p++) if (parts[p].indexOf(tokens[t]) === 0) { ok = true; break; }
+      if (!ok) return 3;
+    }
+    return 2;
+  }
+  function searchLocation(records, query, options) {
+    options = options || {};
+    var q = normalizeSearchText(query);
+    var words = queryTokens(query);
+    var matches = [];
+    var minLength = options.minLength == null ? 1 : Number(options.minLength || 0);
+    var limit = Math.min(Number(options.limit || 30), 30);
+    if (q.length < minLength || !words.length) return { total: 0, items: [] };
+    for (var i = 0; i < (records || []).length; i++) {
+      var record = records[i]._searchText ? records[i] : normalizeRecord(records[i]);
+      var haystack = record.locationNormalized || normalizeSearchText(record.location || '');
+      if (!haystack) continue;
+      if (matchesTokens(haystack, words)) {
+        record._matchedCode = '';
+        record._locationRank = locationRank(record, q, words);
+        matches.push(record);
+      }
+    }
+    matches.sort(function (a, b) {
+      var al = lower(a.location), bl = lower(b.location);
+      return Number(a._locationRank || 99) - Number(b._locationRank || 99) ||
+        al.localeCompare(bl) ||
+        text(a.jobNo).localeCompare(text(b.jobNo), undefined, { numeric: true });
+    });
+    return { total: matches.length, items: matches.slice(0, limit) };
+  }
+  function escapeHtml(value) {
+    return text(value).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function charNormalized(ch) {
+    var s = text(ch);
+    try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (ignoreNormalize) {}
+    s = s.replace(/[\u0111\u0110]/g, function (c) { return c === '\u0110' ? 'D' : 'd'; });
+    s = s.toLocaleLowerCase();
+    var out = '';
+    for (var i = 0; i < s.length; i++) out += /[\p{L}\p{N}]/u.test(s[i]) ? s[i] : ' ';
+    return out || ' ';
+  }
+  function normalizedMap(value) {
+    var raw = text(value), norm = '', map = [];
+    for (var i = 0; i < raw.length;) {
+      var code = raw.codePointAt(i);
+      var ch = String.fromCodePoint(code);
+      var end = i + ch.length;
+      var n = charNormalized(ch);
+      for (var j = 0; j < n.length; j++) {
+        if (n[j] === ' ') {
+          if (!norm || norm[norm.length - 1] === ' ') {
+            if (map.length) map[map.length - 1].end = end;
+          } else {
+            norm += ' ';
+            map.push({ start: i, end: end });
+          }
+        } else {
+          norm += n[j];
+          map.push({ start: i, end: end });
+        }
+      }
+      i = end;
+    }
+    while (norm[0] === ' ') { norm = norm.slice(1); map.shift(); }
+    while (norm[norm.length - 1] === ' ') { norm = norm.slice(0, -1); map.pop(); }
+    return { raw: raw, norm: norm, map: map };
+  }
+  function addRange(ranges, start, end) {
+    if (start < 0 || end <= start) return false;
+    for (var i = 0; i < ranges.length; i++) {
+      if (start < ranges[i].end && end > ranges[i].start) return false;
+    }
+    ranges.push({ start: start, end: end });
+    return true;
+  }
+  function highlightSearchHit(value, query) {
+    var tokens = queryTokens(query).sort(function (a, b) { return b.length - a.length; });
+    if (!tokens.length) return escapeHtml(value);
+    var mapped = normalizedMap(value), ranges = [];
+    var phrase = normalizeSearchText(query);
+    if (phrase && phrase.indexOf(' ') >= 0) {
+      var phraseAt = mapped.norm.indexOf(phrase);
+      while (phraseAt >= 0 && ranges.length < 8) {
+        addRange(
+          ranges,
+          mapped.map[phraseAt] && mapped.map[phraseAt].start,
+          mapped.map[phraseAt + phrase.length - 1] && mapped.map[phraseAt + phrase.length - 1].end
+        );
+        phraseAt = mapped.norm.indexOf(phrase, phraseAt + Math.max(1, phrase.length));
+      }
+    }
+    for (var t = 0; t < tokens.length; t++) {
+      var token = tokens[t], at = mapped.norm.indexOf(token);
+      while (at >= 0 && ranges.length < 8) {
+        var from = mapped.map[at] && mapped.map[at].start;
+        var to = mapped.map[at + token.length - 1] && mapped.map[at + token.length - 1].end;
+        addRange(ranges, from, to);
+        at = mapped.norm.indexOf(token, at + Math.max(1, token.length));
+      }
+    }
+    if (!ranges.length) return escapeHtml(value);
+    ranges.sort(function (a, b) { return a.start - b.start || a.end - b.end; });
+    var html = '', cursor = 0;
+    for (var i = 0; i < ranges.length; i++) {
+      html += escapeHtml(mapped.raw.slice(cursor, ranges[i].start));
+      html += '<mark class="suggestion-hit">' + escapeHtml(mapped.raw.slice(ranges[i].start, ranges[i].end)) + '</mark>';
+      cursor = ranges[i].end;
+    }
+    return html + escapeHtml(mapped.raw.slice(cursor));
+  }
+  function statusHtml(status, renderer) {
+    return renderer ? renderer(status) : '<span class="status-badge">' + escapeHtml(status || '') + '</span>';
+  }
+  function sameSearchText(a, b) {
+    return normalizeSearchText(a) === normalizeSearchText(b);
+  }
+  function renderLocationSuggestion(record, query, index, active, renderer) {
+    record = record || {};
+    var location = text(record.location || '');
+    var jobName = text(record.jobName || '').trim();
+    var status = text(record.status || '').trim();
+    var assignee = text(record.assignee || '').trim();
+    var secondary = 'Job ' + text(record.jobNo || record.projectId || '').trim();
+    if (jobName && !sameSearchText(jobName, location)) secondary += ' · ' + jobName;
+    var right = '';
+    if (status) right += statusHtml(status, renderer);
+    if (assignee && !sameSearchText(assignee, status)) right += '<span class="suggestion-assignee">' + escapeHtml(assignee) + '</span>';
+    return '<button type="button" class="job-suggestion ' + (active ? 'active' : '') + '" data-suggestion-index="' + Number(index || 0) + '" role="option" aria-selected="' + (!!active) + '">' +
+      '<span class="suggestion-body">' +
+        '<span class="suggestion-main"><b>' + highlightSearchHit(location, query) + '</b></span>' +
+        '<span class="suggestion-sub">' + escapeHtml(secondary) + '</span>' +
+      '</span>' +
+      (right ? '<span class="suggestion-right">' + right + '</span>' : '') +
+      '</button>';
+  }
+  function enterChoice(records, query, activeIndex) {
+    records = records || [];
+    if (activeIndex >= 0 && activeIndex < records.length) return records[activeIndex];
+    var q = lower(query).trim();
+    for (var i = 0; i < records.length; i++) if (lower(records[i].jobNo) === q) return records[i];
+    return records.length === 1 ? records[0] : null;
+  }
+  function moveIndex(current, delta, length) {
+    if (!length) return -1;
+    if (current < 0) return delta > 0 ? 0 : length - 1;
+    return (current + delta + length) % length;
+  }
+  function cacheKey(environment, rootPath, schemaVersion) {
+    return ['idx', text(environment || 'sandbox_dropbox'), text(rootPath || '/'), 'v' + text(schemaVersion || 0)].join(':');
+  }
+  root.DongSearch = {
+    parseJobFromFilename: parseJobFromFilename,
+    normalizeSearchText: normalizeSearchText,
+    resolveJobNo: resolveJobNo,
+    normalizeRecord: normalizeRecord,
+    prepareIndex: prepareIndex,
+    search: search,
+    findExactJob: findExactJob,
+    searchLocation: searchLocation,
+    highlightSearchHit: highlightSearchHit,
+    renderLocationSuggestion: renderLocationSuggestion,
+    enterChoice: enterChoice,
+    moveIndex: moveIndex,
+    cacheKey: cacheKey
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>

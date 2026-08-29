@@ -1,0 +1,17 @@
+**/.git/**
+.git/**
+**/node_modules/**
+**/tests/**
+**/docs/**
+**/src/backend/legacy/**
+**/scripts/**
+**/__db__/**
+**/.tmp*/**
+.tmp*/**
+.tmp_rebuild/**
+**/*.test.js
+README.md
+log.md
+package.json
+package-lock.json
+data*.zip

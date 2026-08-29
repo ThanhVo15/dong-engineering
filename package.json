@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "test": "node --test",
+    "test:fixtures": "node --test tests/fixture-shape.test.js",
+    "rebuild:local": "node scripts/local_full_rebuild.js"
+  }
+}

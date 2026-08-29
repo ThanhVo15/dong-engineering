@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <?!= include('src/frontend/Styles'); ?>
+</head>
+<body class="booting auth-locked">
+  <section id="bootScreen" class="boot-screen" aria-label="Starting app" aria-live="polite">
+    <div class="boot-card">
+      <div class="brand login-brand">
+        <span class="brand-title"><span class="brand-do">Do</span><span class="brand-ng">ng Engineering Inc.</span></span>
+        <span class="brand-sub">Project Management</span>
+      </div>
+      <h1>Starting app</h1>
+      <p id="bootMessage">Checking your session...</p>
+      <div class="boot-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <span id="bootProgressFill" style="width:0%"></span>
+      </div>
+      <div class="boot-percent"><span id="bootPercent">0</span>%</div>
+    </div>
+  </section>
+
+  <section id="loginScreen" class="login-screen" aria-label="Login">
+    <div class="login-card">
+      <div class="brand login-brand">
+        <span class="brand-title"><span class="brand-do">Do</span><span class="brand-ng">ng Engineering Inc.</span></span>
+        <span class="brand-sub">Project Management</span>
+      </div>
+      <h1>Sign in</h1>
+      <p>Use your Dong Engineering account to open Project Management.</p>
+      <div class="field"><label for="loginUser">Username</label><input id="loginUser" autocomplete="username"></div>
+      <div class="field"><label for="loginPass">Password</label><div class="password-control"><input id="loginPass" type="password" autocomplete="current-password"><button type="button" class="password-toggle" data-password-toggle="loginPass" aria-label="Show password" title="Show password">&#128065;</button></div></div>
+      <label class="check-field login-remember"><input id="rememberLogin" type="checkbox"> Remember this device for 7 days</label>
+      <button class="btn" id="loginBtn">Login</button>
+      <div id="loginError" class="login-error" role="alert" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <header class="app-header app-shell">
+    <div class="brand">
+      <span class="brand-title"><span class="brand-do">Do</span><span class="brand-ng">ng Engineering Inc.</span></span>
+      <span class="brand-sub">Project Management</span>
+    </div>
+    <div class="header-right">
+      <span class="mode-badge" id="environmentBadge" title="Active Dropbox environment"><b id="modeBadge">…</b></span>
+      <span class="sync-pill"><span id="syncDot" class="dot"></span><span id="syncText">Starting…</span></span>
+      <span class="default-admin-warning hidden" id="defaultAdminWarning">Default admin password is active. Please change it.</span>
+      <button class="loaded-pill" id="loadedBadge" title="Sync and refresh all projects" aria-label="Sync and refresh all projects">
+        <b id="loadedProjectsCount">0</b><span class="loaded-word">projects</span><span aria-hidden="true">↻</span>
+      </button>
+      <button class="loaded-pill current-project icon-only hidden" id="currentProjectBadge" title="Refresh current project" aria-label="Refresh current project">
+        <span id="loadedJob" class="sr-only">—</span><span aria-hidden="true">↻</span>
+      </button>
+      <span class="last-refresh hidden" id="lastRefreshText"></span>
+      <button class="session-pill hidden" id="sessionPill" type="button" title="Account profile"></button>
+      <button class="btn light sm" id="configBtn" aria-expanded="false">⚙ Admin</button>
+      <button class="btn light sm" id="logoutBtn">Logout</button>
+    </div>
+  </header>
+
+  <nav class="tabs app-shell" aria-label="Sections">
+    <button class="tab active" data-tab="pm">Project Management</button>
+  </nav>
+
+  <section id="adminPanel" class="admin-panel app-shell" aria-label="Admin settings"></section>
+
+  <main class="wrap app-shell">
+    <div id="pmScreen">
+      <section id="summaryBar" class="summary-bar card" aria-label="Job summary"></section>
+      <section id="detailsMount" class="card details-card hidden" aria-label="Project details"></section>
+
+      <div id="pmContent" class="workbench-grid">
+        <div class="workbench-notes">
+          <div id="notesMount" class="card"></div>
+        </div>
+        <div class="workbench-main">
+          <div id="codeMount" class="card"></div>
+          <div id="timeMount" class="card"></div>
+        </div>
+      </div>
+      <div id="overviewMount" class="hidden"></div>
+      <div id="controlsMount" class="hidden"></div>
+      <div id="descMount" class="hidden"></div>
+      <section id="editFooterMount" class="edit-footer-mount"></section>
+    </div>
+
+  </main>
+
+  <footer class="app-footer app-shell">
+    <div class="footer-inner">
+      <div id="footerProduct">Dong Engineering Project Management</div>
+      <div id="footerVersion">Version loading…</div>
+      <div id="footerOwnership">This product belongs to Dong Engineering Inc.</div>
+    </div>
+  </footer>
+
+  <div id="serModal" class="modal-overlay"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <?!= include('src/frontend/SearchClient'); ?>
+  <?!= include('src/frontend/Client.js'); ?>
+</body>
+</html>

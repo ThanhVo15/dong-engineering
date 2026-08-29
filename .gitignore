@@ -1,0 +1,10 @@
+.env.local
+.env.*.local
+node_modules/
+artifacts/
+.tmp*/
+__db__/
+scripts/__pycache__/
+*.pyc
+data*.zip
+.clasp.local.json

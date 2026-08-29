@@ -1,0 +1,26 @@
+/*
+ * Historical Sync V1 entrypoint holder.
+ *
+ * This file is deliberately stored under docs/legacy and excluded from Apps
+ * Script pushes. It is kept only as a revert/reference marker; no production
+ * endpoint may call it.
+ */
+var SyncServiceV1 = (function () {
+  'use strict';
+
+  function disabled() {
+    throw new Error('SYNC_V1_DISABLED');
+  }
+
+  return {
+    syncNow: disabled,
+    syncOnce: disabled,
+    collectChanges: disabled,
+    affectedJobs: disabled,
+    affectedJobChanges: disabled,
+    setAutoSync: disabled,
+    autoSyncTriggerInstalled: disabled
+  };
+})();
+
+if (typeof module !== 'undefined' && module.exports) module.exports = SyncServiceV1;
