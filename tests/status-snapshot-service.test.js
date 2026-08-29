@@ -23,8 +23,8 @@ function properties(initial = {}) {
 
 function loadWebApiContext(initialProps = {}, options = {}) {
   const props = properties(initialProps);
-  const config = { environment: 'sandbox_dropbox', autoSyncEnabled: false, dropbox: { rootPath: '/root', pPath: '/root/Chronos/P_Chronos', ac2Path: '/root/AC2', tPath: '/root/Chronos/T_Chronos', dbPath: '/root/__db__' } };
-  const calls = { dropboxCreate: 0, readMeta: 0 };
+  const config = { environment: 'sandbox_dropbox', autoSyncEnabled: options.autoSyncEnabled === true, dropbox: { rootPath: '/root', pPath: '/root/Chronos/P_Chronos', ac2Path: '/root/AC2', tPath: '/root/Chronos/T_Chronos', dbPath: '/root/__db__' } };
+  const calls = { dropboxCreate: 0, readMeta: 0, urlFetch: 0, lastFetch: null };
   const context = vm.createContext({
     console,
     Date,
@@ -37,7 +37,17 @@ function loadWebApiContext(initialProps = {}, options = {}) {
     Math,
     isFinite,
     PropertiesService: props.service,
-    AppConfig: { current: () => config, normalizePath: (value) => value || '' },
+    UrlFetchApp: {
+      fetch(url, fetchOptions) {
+        calls.urlFetch += 1;
+        calls.lastFetch = { url, options: fetchOptions };
+        return {
+          getResponseCode: () => options.githubStatusCode || 204,
+          getContentText: () => options.githubResponseBody || ''
+        };
+      }
+    },
+    AppConfig: { current: () => ({ ...config, autoSyncEnabled: props.store.AUTO_SYNC_ENABLED === 'true' || config.autoSyncEnabled === true }), normalizePath: (value) => value || '' },
     DropboxClient: {
       create() {
         calls.dropboxCreate += 1;
@@ -65,6 +75,7 @@ function loadWebApiContext(initialProps = {}, options = {}) {
       autoSyncTriggerInstalled: () => true,
       setAutoSync: (enabled) => {
         props.store.AUTO_SYNC_ENABLED = enabled ? 'true' : 'false';
+        config.autoSyncEnabled = enabled === true;
         context.StatusSnapshotService.merge({ autoSyncEnabled: enabled === true }, { ...config, autoSyncEnabled: enabled === true });
         return { ok: true, enabled: enabled === true, triggerInstalled: enabled === true, intervalMinutes: 5 };
       }
@@ -177,7 +188,7 @@ test('stale running snapshot keeps known counts when live read hits quota', () =
   assert.equal(calls.readMeta, 1);
 });
 
-test('apiSetAutoSyncEnabled refuses Apps Script auto sync without reading Dropbox metadata', () => {
+test('apiSetAutoSyncEnabled installs Apps Script dispatcher trigger without reading Dropbox metadata', () => {
   const seed = {
     lastKnownProjectCount: 3168,
     lastKnownCursorPresent: true,
@@ -195,20 +206,69 @@ test('apiSetAutoSyncEnabled refuses Apps Script auto sync without reading Dropbo
   const stored = JSON.parse(props.store.DONG_LIGHTWEIGHT_SYNC_STATUS_SNAPSHOT);
 
   assert.equal(res.ok, true);
-  assert.equal(res.data.ok, false);
-  assert.equal(res.data.enabled, false);
-  assert.equal(res.data.code, 'APPS_SCRIPT_INCREMENTAL_DISABLED');
-  assert.equal(stored.autoSyncEnabled, false);
+  assert.equal(res.data.ok, true);
+  assert.equal(res.data.enabled, true);
+  assert.equal(stored.autoSyncEnabled, true);
   assert.equal(calls.dropboxCreate, 0);
   assert.equal(calls.readMeta, 0);
 });
 
-test('manual Apps Script incremental endpoint is disabled without creating Dropbox client', () => {
-  const { context, calls } = loadWebApiContext();
+test('autoSyncTick dispatches GitHub Actions without creating Dropbox client', () => {
+  const { context, calls } = loadWebApiContext({
+    AUTO_SYNC_ENABLED: 'true',
+    GITHUB_DISPATCH_TOKEN: 'token',
+    GITHUB_DISPATCH_REPOSITORY: 'ThanhVo15/dong-engineering',
+    GITHUB_DISPATCH_EVENT_TYPE: 'dropbox-incremental-sync'
+  });
+
+  const res = context.autoSyncTick();
+
+  assert.equal(res.ok, true);
+  assert.equal(res.accepted, true);
+  assert.equal(res.code, 'GITHUB_DISPATCH_ACCEPTED');
+  assert.equal(calls.urlFetch, 1);
+  assert.equal(calls.dropboxCreate, 0);
+  assert.equal(calls.readMeta, 0);
+  assert.equal(calls.lastFetch.url, 'https://api.github.com/repos/ThanhVo15/dong-engineering/dispatches');
+  assert.equal(calls.lastFetch.options.method, 'post');
+  assert.match(calls.lastFetch.options.payload, /"event_type":"dropbox-incremental-sync"/);
+});
+
+test('autoSyncTick reports missing GitHub dispatch token without creating Dropbox client', () => {
+  const { context, calls } = loadWebApiContext({ AUTO_SYNC_ENABLED: 'true' });
+
+  const res = context.autoSyncTick();
+
+  assert.equal(res.ok, false);
+  assert.equal(res.accepted, false);
+  assert.equal(res.code, 'GITHUB_DISPATCH_TOKEN_MISSING');
+  assert.equal(calls.urlFetch, 0);
+  assert.equal(calls.dropboxCreate, 0);
+  assert.equal(calls.readMeta, 0);
+});
+
+test('apiRequestIncrementalSync dispatches GitHub Actions without creating Dropbox client', () => {
+  const { context, calls } = loadWebApiContext({
+    GITHUB_DISPATCH_TOKEN: 'token',
+    GITHUB_DISPATCH_REPOSITORY: 'ThanhVo15/dong-engineering'
+  });
 
   const res = context.apiRequestIncrementalSync('token');
 
-  assert.equal(res.accepted, false);
+  assert.equal(res.ok, true);
+  assert.equal(res.data.accepted, true);
+  assert.equal(res.data.code, 'GITHUB_DISPATCH_ACCEPTED');
+  assert.equal(calls.urlFetch, 1);
+  assert.equal(calls.dropboxCreate, 0);
+  assert.equal(calls.readMeta, 0);
+});
+
+test('apiSyncNow direct Apps Script incremental endpoint remains disabled without creating Dropbox client', () => {
+  const { context, calls } = loadWebApiContext();
+
+  const res = context.apiSyncNow();
+
+  assert.equal(res.ok, false);
   assert.equal(res.skipped, true);
   assert.equal(res.code, 'APPS_SCRIPT_INCREMENTAL_DISABLED');
   assert.equal(calls.dropboxCreate, 0);

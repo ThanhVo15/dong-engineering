@@ -258,3 +258,21 @@
   - minimal `permissions: contents: read`.
 - Native GitHub `schedule` remains active.
 - If native GitHub schedule remains unreliable, an external free cron can POST a `repository_dispatch` event every 5 minutes to trigger the same workflow.
+
+## Step 15 - Apps Script trigger dispatches GitHub Actions
+
+- Clarified intended architecture: Apps Script owns the reliable 5-minute timer, but GitHub Actions owns Dropbox incremental sync execution.
+- Updated `src/backend/WebApi.js` so `autoSyncTick()` no longer creates a Dropbox client or calls `SyncService.syncNow()`.
+- `autoSyncTick()` now checks `AUTO_SYNC_ENABLED`; when enabled it POSTs GitHub `repository_dispatch` to `https://api.github.com/repos/<repository>/dispatches`.
+- Updated `apiRequestIncrementalSync()`, `apiRequestProjectIndexSync()`, and `apiRunSyncNow()` so the Refresh/Sync buttons also dispatch GitHub Actions instead of running Apps Script Dropbox sync.
+- Updated the frontend to wait until public sync metadata shows a cache timestamp at/after the GitHub dispatch `triggeredAt` time, then reload the project index and visible project.
+- Required Apps Script Properties:
+  - `GITHUB_DISPATCH_TOKEN`: GitHub token with Contents read/write permission for repository dispatch.
+  - optional `GITHUB_DISPATCH_REPOSITORY`: defaults to `ThanhVo15/dong-engineering`.
+  - optional `GITHUB_DISPATCH_EVENT_TYPE`: defaults to `dropbox-incremental-sync`.
+- Direct Apps Script incremental sync endpoints remain disabled; the timer path only dispatches GitHub Actions.
+- Verification:
+  - `node --check src\backend\WebApi.js`: PASS.
+  - `npm.cmd test -- tests/status-snapshot-service.test.js tests/legacy-api-coverage.test.js tests/frontend-syntax.test.js`: PASS, 40/40.
+  - `npm.cmd test`: PASS, 120/120.
+- Deployment boundary: local code is ready, but Apps Script production will not dispatch GitHub until this source is pushed/deployed with `clasp` and the GitHub token property is set.

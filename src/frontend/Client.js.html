@@ -903,6 +903,34 @@
     var prefix = by === 'auto-sync' ? 'Auto Sync' : 'Sync';
     return prefix + ': ' + formatRefresh(iso);
   }
+  function syncCompletedAfter(st, triggeredAt) {
+    if (!triggeredAt) return false;
+    var completedAt = Date.parse(syncRefreshIso(st) || '');
+    var requestedAt = Date.parse(triggeredAt || '');
+    return isFinite(completedAt) && isFinite(requestedAt) && completedAt >= requestedAt;
+  }
+  function waitForGitHubDispatchedSync(triggeredAt, attempt) {
+    attempt = Number(attempt || 0);
+    return gas('apiGetPublicSyncStatus').then(function (res) {
+      var payload = dataOf(res);
+      var st = payload && payload.syncStatus || {};
+      var state = String(st.state || '').toLowerCase();
+      if (S.cfg) {
+        S.cfg.syncStatus = st;
+        if (payload && payload.syncHealth) S.cfg.syncHealth = payload.syncHealth;
+        if (payload && payload.syncHealth) S.syncHealth = payload.syncHealth;
+        if (payload && payload.autoSync) S.cfg.autoSync = payload.autoSync;
+      }
+      renderHeader();
+      if (syncCompletedAfter(st, triggeredAt)) return st;
+      if (state === 'failed' || state === 'failed_timeout' || state === 'cancelled') return st;
+      if (attempt >= 80) return { state: 'failed_timeout', errorCode: 'GITHUB_SYNC_TIMEOUT' };
+      setSync('syncing', 'GitHub Actions sync is running...');
+      return new Promise(function (resolve) {
+        setTimeout(function () { resolve(waitForGitHubDispatchedSync(triggeredAt, attempt + 1)); }, SYNC_WAIT_PUBLISH_MS);
+      });
+    });
+  }
 
   function renderHeader() {
     $('modeBadge').textContent = S.cfg ? S.cfg.environmentLabel : '…';
@@ -961,10 +989,19 @@
         toast(d.errorCode || 'Sync was not accepted.', 'error');
         return;
       }
-      setSync('syncing', d.message || 'Incremental sync started');
-      toast('Dropbox changes checked. Refreshing project list.', 'success');
+      setSync('syncing', d.message || 'GitHub Actions sync triggered');
+      toast(d.message || 'GitHub Actions sync triggered.', 'success');
       pollPublicStatus();
       Cache.set(indexCacheKey(), null);
+      if (d && d.code === 'GITHUB_DISPATCH_ACCEPTED' && d.triggeredAt) {
+        return waitForGitHubDispatchedSync(d.triggeredAt).then(function (st) {
+          if (st && (st.state === 'failed_timeout' || st.errorCode)) {
+            throw Object.assign(new Error(st.errorCode || 'GitHub sync did not complete yet'), st);
+          }
+          setSync('ok', 'GitHub sync complete. Refreshing project list...');
+          return loadIndex(false).then(function () { return refreshVisibleProjectIfSafe('github-dispatch-sync'); });
+        });
+      }
       return loadIndex(false).then(function () { return refreshVisibleProjectIfSafe('manual-sync'); });
     }).catch(function (e) {
       setSync('syncing', 'Sync response failed · refreshing project list…');
@@ -1898,9 +1935,13 @@
     if (!projectKey) return;
     var requestId = ++S.refreshRequestId;
     var dirtyPayload = dirtyPayloadFromState();
+    var beforeToken = currentProjectVersion().publishToken;
     setProjectFreshnessState('refreshing');
-    gas('apiRequestProjectIndexSync', S.adminToken).then(function () {
-      return waitForSyncPublish(currentProjectVersion().publishToken);
+    gas('apiRequestProjectIndexSync', S.adminToken).then(function (res) {
+      var d = dataOf(res);
+      if (d && d.accepted === false) throw Object.assign(new Error(d.errorCode || 'Sync rejected'), d);
+      if (d && d.code === 'GITHUB_DISPATCH_ACCEPTED' && d.triggeredAt) return waitForGitHubDispatchedSync(d.triggeredAt);
+      return waitForSyncPublish(beforeToken);
     }).then(function (sync) {
       if (requestId !== S.refreshRequestId || String(currentProjectKey()) !== String(projectKey)) return null;
       if (!sync || String(sync.state || '').toLowerCase() !== 'completed') {
@@ -2560,8 +2601,12 @@
         S.lastConflict = { message: e.message || 'Conflict', conflicts: e.detail && e.detail.conflicts || [] };
         setSync('syncing', 'Conflict detected. Loading latest Dropbox data...');
         var dirtyPayload = dirtyPayloadFromState();
-        gas('apiRequestProjectIndexSync', S.adminToken).then(function () {
-          return waitForSyncPublish(currentProjectVersion().publishToken);
+        var beforeToken = currentProjectVersion().publishToken;
+        gas('apiRequestProjectIndexSync', S.adminToken).then(function (res) {
+          var d = dataOf(res);
+          if (d && d.accepted === false) throw Object.assign(new Error(d.errorCode || 'Sync rejected'), d);
+          if (d && d.code === 'GITHUB_DISPATCH_ACCEPTED' && d.triggeredAt) return waitForGitHubDispatchedSync(d.triggeredAt);
+          return waitForSyncPublish(beforeToken);
         }).then(function (sync) {
           if (sync && String(sync.state || '').toLowerCase() === 'completed') return requestProjectDetail(payload.projectId || payload.jobNo, { bypassCache: true });
           if (sync && sync.errorCode === 'DROPBOX_CURSOR_RESET') throw Object.assign(new Error('Dropbox change history must be rebuilt before this project can be verified.'), { code: 'DROPBOX_CURSOR_RESET' });
@@ -3693,6 +3738,19 @@
     return gas(apiName, S.adminToken).then(function (res) {
       var d = dataOf(res);
       if (d && d.accepted === false) throw Object.assign(new Error(d.errorCode || 'Request was not accepted'), d);
+      if (d && d.code === 'GITHUB_DISPATCH_ACCEPTED' && d.triggeredAt) {
+        setAdminOut(d.message || 'GitHub Actions sync triggered. Waiting for cache update...');
+        setSync('syncing', d.message || 'GitHub Actions sync triggered');
+        return waitForGitHubDispatchedSync(d.triggeredAt).then(function (st) {
+          if (st && (st.state === 'failed_timeout' || st.errorCode)) {
+            throw Object.assign(new Error(st.errorCode || 'GitHub sync did not complete yet'), st);
+          }
+          setAdminOut(successText, true);
+          toast(successText, 'success');
+          pollSyncStatus();
+          return st;
+        });
+      }
       if (syncHasMorePending(d) && attempt < 40) {
         var pendingJobs = Number(d.result && d.result.pendingJobs || 0);
         var nextText = pendingJobs ? ('Incremental sync still has ' + pendingJobs + ' job(s). Continuing...') : 'Incremental sync still has pending work. Continuing...';

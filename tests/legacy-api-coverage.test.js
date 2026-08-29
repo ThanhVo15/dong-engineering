@@ -117,7 +117,9 @@ test('auto sync status exposes trigger and last check time', () => {
   assert.doesNotMatch(syncService, /AUTO_SYNC_COOLDOWN/);
   assert.doesNotMatch(syncService, /function\s+autoSyncTick\s*\(/);
   assert.doesNotMatch(webApi, /resetAutoSyncTimerAfterManualSync_/);
-  assert.match(webApi, /function autoSyncTick\(\)[\s\S]*?APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED[\s\S]*?APPS_SCRIPT_INCREMENTAL_DISABLED/);
+  assert.match(webApi, /function autoSyncTick\(\)[\s\S]*?return triggerGitHubDropboxSync_\('autoSyncTick'\)/);
+  assert.match(webApi, /function\s+triggerGitHubDropboxSync_\s*\(/);
+  assert.match(webApi, /https:\/\/api\.github\.com\/repos\/' \+ cfg\.repository \+ '\/dispatches/);
   assert.match(webApi, /function\s+autoSyncStatus_\s*\(/);
   assert.match(webApi, /triggerInstalled:\s*installed/);
   assert.match(webApi, /var lastCheckedAt = meta\.lastSyncAt \|\| meta\.lastCheckedAt \|\| meta\.lastCacheUpdateAt \|\| meta\.lastFullRebuildAt \|\| ''/);
@@ -127,15 +129,16 @@ test('auto sync status exposes trigger and last check time', () => {
   assert.match(webApi, /apiSetAutoSyncEnabled[\s\S]*syncHealth:\s*health/);
 });
 
-test('Apps Script incremental sync endpoints are hard-disabled for GitHub Actions handoff', () => {
+test('Apps Script direct incremental endpoints are disabled while auto tick dispatches GitHub Actions', () => {
   const syncService = fs.readFileSync('src/backend/SyncService.js', 'utf8');
   const webApi = fs.readFileSync('src/backend/WebApi.js', 'utf8');
 
   assert.match(webApi, /APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED = true/);
   assert.match(webApi, /function\s+appsScriptIncrementalDisabledPayload_\s*\(/);
-  assert.match(webApi, /function\s+apiSyncNow\s*\(\)[\s\S]*?APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED[\s\S]*?APPS_SCRIPT_INCREMENTAL_DISABLED/);
+  assert.match(webApi, /function\s+apiSyncNow\s*\(\)[\s\S]*?APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED[\s\S]*?appsScriptIncrementalDisabledPayload_\(\)/);
   assert.match(webApi, /apiSyncNowLegacy_[\s\S]*?APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED[\s\S]*?legacyOk_\(appsScriptIncrementalDisabledPayload_\(\)\)/);
-  assert.match(webApi, /apiSetAutoSyncEnabled[\s\S]*?enabled === true && APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED[\s\S]*?SyncService\.setAutoSync\(false\)/);
+  assert.match(webApi, /function autoSyncTick\(\)[\s\S]*?triggerGitHubDropboxSync_\('autoSyncTick'\)/);
+  assert.match(webApi, /function\s+apiSetAutoSyncEnabled[\s\S]*?SyncService\.setAutoSync\(enabled === true\)/);
   assert.match(syncService, /function\s+syncNow\s*\(client,\s*cacheRepo,\s*config\)\s*\{[\s\S]*?return syncOnce\(client,\s*cacheRepo,\s*config\);[\s\S]*?\}/);
 });
 

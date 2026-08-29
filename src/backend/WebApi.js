@@ -7,6 +7,80 @@ function makeBackendContext() {
 
 var APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED = true;
 
+function githubDispatchConfig_() {
+  var p = {};
+  if (typeof PropertiesService !== 'undefined') {
+    p = PropertiesService.getScriptProperties().getProperties();
+  }
+  return {
+    repository: p.GITHUB_DISPATCH_REPOSITORY || p.GITHUB_REPOSITORY || 'ThanhVo15/dong-engineering',
+    eventType: p.GITHUB_DISPATCH_EVENT_TYPE || 'dropbox-incremental-sync',
+    token: p.GITHUB_DISPATCH_TOKEN || p.GITHUB_TOKEN || ''
+  };
+}
+
+function triggerGitHubDropboxSync_(source) {
+  if (typeof UrlFetchApp === 'undefined') {
+    return {
+      ok: false,
+      accepted: false,
+      code: 'GITHUB_DISPATCH_UNAVAILABLE',
+      message: 'UrlFetchApp is not available; cannot trigger GitHub Actions.'
+    };
+  }
+  var cfg = githubDispatchConfig_();
+  if (!cfg.token) {
+    return {
+      ok: false,
+      accepted: false,
+      code: 'GITHUB_DISPATCH_TOKEN_MISSING',
+      message: 'Set GITHUB_DISPATCH_TOKEN in Apps Script Properties to trigger GitHub Actions.'
+    };
+  }
+  var url = 'https://api.github.com/repos/' + cfg.repository + '/dispatches';
+  var payload = {
+    event_type: cfg.eventType,
+    client_payload: {
+      source: source || 'apps_script',
+      triggeredAt: new Date().toISOString()
+    }
+  };
+  var res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    headers: {
+      Authorization: 'Bearer ' + cfg.token,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    },
+    muteHttpExceptions: true
+  });
+  var status = res.getResponseCode();
+  if (status >= 200 && status < 300) {
+    return {
+      ok: true,
+      accepted: true,
+      code: 'GITHUB_DISPATCH_ACCEPTED',
+      statusCode: status,
+      repository: cfg.repository,
+      eventType: cfg.eventType,
+      triggeredAt: payload.client_payload.triggeredAt,
+      message: 'GitHub Actions incremental sync was triggered.'
+    };
+  }
+  var body = '';
+  try { body = String(res.getContentText() || '').slice(0, 500); } catch (ignoreBody) {}
+  return {
+    ok: false,
+    accepted: false,
+    code: 'GITHUB_DISPATCH_FAILED',
+    statusCode: status,
+    message: 'GitHub repository_dispatch failed with HTTP ' + status + '.',
+    detail: body
+  };
+}
+
 function appsScriptIncrementalDisabledPayload_() {
   return {
     accepted: false,
@@ -72,7 +146,6 @@ function apiGetSyncStatus() {
 }
 
 function apiSetAutoSync(enabled) {
-  if (enabled === true && APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED) return { ok: false, enabled: false, code: 'APPS_SCRIPT_INCREMENTAL_DISABLED', message: appsScriptIncrementalDisabledPayload_().message };
   return SyncService.setAutoSync(enabled === true);
 }
 
@@ -82,14 +155,9 @@ function apiGetAutoSyncStatus() {
 }
 
 function autoSyncTick() {
-  if (APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED) {
-    return { ok: true, skipped: true, code: 'APPS_SCRIPT_INCREMENTAL_DISABLED', message: appsScriptIncrementalDisabledPayload_().message };
-  }
   var config = AppConfig.current();
   if (!config.autoSyncEnabled) return { ok: true, skipped: true };
-  var client = DropboxClient.create(config);
-  var cacheRepo = CacheRepository.create(client, config);
-  return SyncService.syncNow(client, cacheRepo, config);
+  return triggerGitHubDropboxSync_('autoSyncTick');
 }
 
 /* -------------------------------------------------------------------------
@@ -708,21 +776,21 @@ function apiGetSyncIssueLog(token) {
 function apiRequestIncrementalSync(token) {
   return catchLegacy_(function () {
     requireSession_(token);
-    return apiSyncNowLegacy_().data;
+    return legacyOk_(triggerGitHubDropboxSync_('apiRequestIncrementalSync'));
   });
 }
 
 function apiRequestProjectIndexSync(token) {
   return catchLegacy_(function () {
     requireSession_(token);
-    return apiSyncNowLegacy_().data;
+    return legacyOk_(triggerGitHubDropboxSync_('apiRequestProjectIndexSync'));
   });
 }
 
 function apiRunSyncNow(token) {
   return catchLegacy_(function () {
     requireSession_(token, ['admin']);
-    return apiSyncNowLegacy_().data;
+    return legacyOk_(triggerGitHubDropboxSync_('apiRunSyncNow'));
   });
 }
 
@@ -739,25 +807,6 @@ function apiSyncNowLegacy_() {
 function apiSetAutoSyncEnabled(token, enabled) {
   return catchLegacy_(function () {
     requireSession_(token, ['admin']);
-    if (enabled === true && APPS_SCRIPT_INCREMENTAL_SYNC_DISABLED) {
-      try { SyncService.setAutoSync(false); } catch (ignoreDisable) {}
-      var disabledConfig = AppConfig.current();
-      var disabledSvc = statusSnapshotService_();
-      var disabledSnapshot = disabledSvc && disabledSvc.merge ? disabledSvc.merge({ autoSyncEnabled: false }, disabledConfig) : null;
-      var disabledState = disabledSnapshot && disabledSvc && disabledSvc.metaFromSnapshot
-        ? { meta: disabledSvc.metaFromSnapshot(disabledSnapshot), config: disabledConfig, client: null }
-        : readStatusState_(disabledConfig, false);
-      var disabledHealth = syncSnapshot_(disabledState.meta, disabledConfig, disabledState.client);
-      return legacyOk_({
-        ok: false,
-        enabled: false,
-        code: 'APPS_SCRIPT_INCREMENTAL_DISABLED',
-        message: appsScriptIncrementalDisabledPayload_().message,
-        autoSync: disabledHealth.autoSync,
-        syncStatus: legacySyncStatus_(disabledState.meta),
-        syncHealth: disabledHealth
-      });
-    }
     var result = SyncService.setAutoSync(enabled === true);
     var freshConfig = AppConfig.current();
     var svc = statusSnapshotService_();
