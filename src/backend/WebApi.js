@@ -47,17 +47,28 @@ function triggerGitHubDropboxSync_(source) {
       triggeredAt: new Date().toISOString()
     }
   };
-  var res = UrlFetchApp.fetch(url, {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify(payload),
-    headers: {
-      Authorization: 'Bearer ' + cfg.token,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28'
-    },
-    muteHttpExceptions: true
-  });
+  var res;
+  try {
+    res = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      headers: {
+        Authorization: 'Bearer ' + cfg.token,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      },
+      muteHttpExceptions: true
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      accepted: false,
+      code: 'GITHUB_DISPATCH_FETCH_FAILED',
+      errorCode: 'GITHUB_DISPATCH_FETCH_FAILED',
+      message: err && err.message || String(err || 'GitHub dispatch request failed.')
+    };
+  }
   var status = res.getResponseCode();
   if (status >= 200 && status < 300) {
     return {
