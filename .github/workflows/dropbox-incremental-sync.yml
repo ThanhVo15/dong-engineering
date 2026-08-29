@@ -12,9 +12,11 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    environment: Prod
     timeout-minutes: 30
     env:
       DONG_ENVIRONMENT: Prod
+      DONG_DROPBOX_VAR_PREFIX: SANDBOX
       SANDBOX_DROPBOX_APP_KEY: ${{ secrets.SANDBOX_DROPBOX_APP_KEY || vars.SANDBOX_DROPBOX_APP_KEY }}
       SANDBOX_DROPBOX_APP_SECRET: ${{ secrets.SANDBOX_DROPBOX_APP_SECRET || vars.SANDBOX_DROPBOX_APP_SECRET }}
       SANDBOX_DROPBOX_REFRESH_TOKEN: ${{ secrets.SANDBOX_DROPBOX_REFRESH_TOKEN || vars.SANDBOX_DROPBOX_REFRESH_TOKEN }}
@@ -44,6 +46,7 @@ jobs:
           fi
           {
             echo "DONG_ENVIRONMENT=${DONG_ENVIRONMENT}"
+            echo "DONG_DROPBOX_VAR_PREFIX=${DONG_DROPBOX_VAR_PREFIX}"
             echo "SANDBOX_DROPBOX_APP_KEY=${SANDBOX_DROPBOX_APP_KEY}"
             echo "SANDBOX_DROPBOX_APP_SECRET=${SANDBOX_DROPBOX_APP_SECRET}"
             echo "SANDBOX_DROPBOX_REFRESH_TOKEN=${SANDBOX_DROPBOX_REFRESH_TOKEN}"

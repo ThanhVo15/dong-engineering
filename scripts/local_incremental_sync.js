@@ -31,8 +31,17 @@ function normalizeDropboxPath(value) {
   return p.replace(/\/+/g, '/').replace(/\/$/, '');
 }
 
+function normalizeEnvironment(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'prod' || raw === 'production' || raw === 'production_dropbox') return 'production_dropbox';
+  if (raw === 'sandbox' || raw === 'sandbox_dropbox') return 'sandbox_dropbox';
+  return raw || 'sandbox_dropbox';
+}
+
 function configFromEnv(env) {
-  const prefix = env.DONG_ENVIRONMENT === 'production_dropbox' ? 'PROD' : 'SANDBOX';
+  const environment = normalizeEnvironment(env.DONG_ENVIRONMENT);
+  const requestedPrefix = String(env.DONG_DROPBOX_VAR_PREFIX || '').trim().toUpperCase();
+  const prefix = requestedPrefix || (environment === 'production_dropbox' ? 'PROD' : 'SANDBOX');
   const root = normalizeDropboxPath(
     env[prefix + '_DROPBOX_ROOT'] ||
     env[prefix + '_DONG_DROPBOX_ROOT_PATH'] ||
@@ -40,7 +49,7 @@ function configFromEnv(env) {
     '/@ Job Information/LinkAJ'
   );
   return {
-    environment: env.DONG_ENVIRONMENT || 'sandbox_dropbox',
+    environment,
     dropbox: {
       appKey: env[prefix + '_DROPBOX_APP_KEY'] || env.DROPBOX_APP_KEY || '',
       appSecret: env[prefix + '_DROPBOX_APP_SECRET'] || env.DROPBOX_APP_SECRET || '',

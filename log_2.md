@@ -211,3 +211,15 @@
   - attempted `npx.cmd clasp run apiSetAutoSync --params "[false]"`;
   - result: failed with `Unable to run script function. Please make sure you have permission to run the script function.`;
   - therefore Apps Script auto-sync was not disabled by CLI in this step and still needs to be disabled from Apps Script UI/admin once GitHub Actions is active.
+
+## Step 11 - GitHub Actions Environment Prod wiring
+
+- User confirmed GitHub Actions Environment is named `Prod` and contains the `SANDBOX_DROPBOX_*` variables.
+- Workflow adjusted:
+  - job declares `environment: Prod`;
+  - `.env.local` written with `DONG_ENVIRONMENT=Prod`;
+  - `.env.local` also writes `DONG_DROPBOX_VAR_PREFIX=SANDBOX` so the sync runner reads `SANDBOX_DROPBOX_*` even though the GitHub Environment is named `Prod`.
+- `scripts/local_incremental_sync.js` adjusted to honor optional `DONG_DROPBOX_VAR_PREFIX`.
+- Verification:
+  - `node --check scripts\local_incremental_sync.js`: PASS.
+  - `npm.cmd test -- tests/save-sync-service.test.js tests/python-full-rebuild-publish.test.js`: PASS, 52/52.
