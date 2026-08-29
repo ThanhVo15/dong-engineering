@@ -25,6 +25,7 @@ function triggerGitHubDropboxSync_(source) {
       ok: false,
       accepted: false,
       code: 'GITHUB_DISPATCH_UNAVAILABLE',
+      errorCode: 'GITHUB_DISPATCH_UNAVAILABLE',
       message: 'UrlFetchApp is not available; cannot trigger GitHub Actions.'
     };
   }
@@ -34,6 +35,7 @@ function triggerGitHubDropboxSync_(source) {
       ok: false,
       accepted: false,
       code: 'GITHUB_DISPATCH_TOKEN_MISSING',
+      errorCode: 'GITHUB_DISPATCH_TOKEN_MISSING',
       message: 'Set GITHUB_DISPATCH_TOKEN in Apps Script Properties to trigger GitHub Actions.'
     };
   }
@@ -62,6 +64,7 @@ function triggerGitHubDropboxSync_(source) {
       ok: true,
       accepted: true,
       code: 'GITHUB_DISPATCH_ACCEPTED',
+      errorCode: '',
       statusCode: status,
       repository: cfg.repository,
       eventType: cfg.eventType,
@@ -75,6 +78,7 @@ function triggerGitHubDropboxSync_(source) {
     ok: false,
     accepted: false,
     code: 'GITHUB_DISPATCH_FAILED',
+    errorCode: 'GITHUB_DISPATCH_FAILED',
     statusCode: status,
     message: 'GitHub repository_dispatch failed with HTTP ' + status + '.',
     detail: body
