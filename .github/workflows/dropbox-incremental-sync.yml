@@ -3,7 +3,9 @@ run-name: Dropbox Incremental Sync (${{ github.event_name }})
 
 on:
   schedule:
-    - cron: "1,6,11,16,21,26,31,36,41,46,51,56 * * * *"
+    # GitHub schedule is best-effort; avoid minute 00 where queue load is highest.
+    - cron: "2/5 * * * *"
+      timezone: "Asia/Saigon"
   workflow_dispatch:
   repository_dispatch:
     types:
