@@ -241,3 +241,10 @@
 - Deployment boundary:
   - GitHub push will update repository and Actions workflow;
   - Apps Script production will not receive this hard-disable until `clasp push` / Apps Script deployment is performed.
+
+## Step 13 - GitHub schedule offset to improve automatic cron pickup
+
+- GitHub manual workflow runs were observed by the user, but no automatic schedule run was visible yet.
+- GitHub Actions schedule is best-effort and can be delayed/dropped during high-load periods, especially at the start of an hour.
+- Workflow cron changed from `*/5 * * * *` to `1,6,11,16,21,26,31,36,41,46,51,56 * * * *`.
+- This still runs every 5 minutes, but avoids minute `00`.
