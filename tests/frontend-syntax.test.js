@@ -241,6 +241,15 @@ test('frontend sync status polling is throttled to protect Apps Script UrlFetch 
   assert.doesNotMatch(client, /waitForSyncPublish\(beforeToken, attempt \+ 1\)\); \}, 5000\)/);
 });
 
+test('cached index revalidation keeps search inputs mounted and usable', () => {
+  const client = fs.readFileSync('src/frontend/Client.js.html', 'utf8');
+  assert.match(client, /var hasCachedIndex = !!\(cached && cached\.records && cached\.records\.length\)/);
+  assert.match(client, /S\.indexLoading = !hasCachedIndex/);
+  assert.match(client, /if \(!\$\('jobSearch'\) \|\| autoOpen \|\| !S\.bundle\) renderSummaryBar\(\);/);
+  assert.match(client, /else renderSearchSuggestions\(\);/);
+  assert.doesNotMatch(client, /if \(cached && cached\.records && cached\.records\.length\) \{\s*S\.jobs =[\s\S]*?renderSummaryBar\(\);/);
+});
+
 test('frontend does not prefetch project detail rows from search results', () => {
   const client = fs.readFileSync('src/frontend/Client.js.html', 'utf8');
   assert.match(client, /function queueDetailPrefetch\(jobNo\)\s*{\s*return;\s*}/);

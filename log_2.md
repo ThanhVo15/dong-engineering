@@ -309,3 +309,19 @@
   - `npm.cmd test -- tests/dropbox-client-token-cache.test.js tests/status-snapshot-service.test.js tests/frontend-syntax.test.js tests/legacy-api-coverage.test.js tests/gas-runtime-contract.test.js`: PASS, 47/47.
 - Deployment boundary:
   - Local code is ready for full test, git push, and Apps Script deployment.
+
+## Step 18 - Keep search usable during cached index revalidation
+
+- User reported the UI showing `Showing cache · revalidating…` and blocking typing a job/code search value.
+- Root cause in the frontend:
+  - `loadIndex(false)` set `S.indexLoading = true` even when a cached project index was already available.
+  - The same cached revalidation path called `renderSummaryBar()`, replacing the search inputs while the user was typing.
+- Change:
+  - When cached index records exist, `loadIndex()` keeps `S.indexLoading = false`.
+  - Cached revalidation no longer rebuilds `summaryBar` if the search input is already mounted and a project is open; it refreshes suggestions instead.
+  - Real first-load/no-cache behavior still uses the loading state and renders the summary bar normally.
+- Verification:
+  - `npm.cmd test -- tests/frontend-syntax.test.js tests/legacy-api-coverage.test.js`: PASS, 35/35.
+  - `npm.cmd test`: PASS, 127/127.
+- Deployment boundary:
+  - Local code is ready for git push and Apps Script deployment.

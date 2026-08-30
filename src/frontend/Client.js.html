@@ -1471,20 +1471,24 @@
     options = options || {};
     var key = indexCacheKey();
     var cached = Cache.get(key);
-    S.indexLoading = true;
+    var hasCachedIndex = !!(cached && cached.records && cached.records.length);
+    S.indexLoading = !hasCachedIndex;
     $('loadedBadge').classList.add('loading');
     if (cached && cached.directFileSearch) {
       Cache.set(key, null);
       cached = null;
+      hasCachedIndex = false;
+      S.indexLoading = true;
     }
-    if (cached && cached.records && cached.records.length) {
+    if (hasCachedIndex) {
       S.jobs = window.DongSearch.prepareIndex(cached.records);
       S.indexMeta = cached;
-      renderSummaryBar();
+      if (!$('jobSearch') || autoOpen || !S.bundle) renderSummaryBar();
+      else renderSearchSuggestions();
     }
 
     if (!shouldRevalidateIndex(cached, autoOpen, options)) return finishIndexFromCache();
-    if (cached && cached.records && cached.records.length) setSync('syncing', 'Showing cache · revalidating…');
+    if (hasCachedIndex) setSync('syncing', 'Showing cache · revalidating…');
 
     return gas('apiGetProjectIndex', S.adminToken).then(function (res) {
       var data = dataOf(res);
